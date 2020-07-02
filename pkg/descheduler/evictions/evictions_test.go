@@ -1,0 +1,86 @@
+/*
+ * Copyright ©2020. The virtual-kubelet authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package evictions
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/patrickmn/go-cache"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	core "k8s.io/client-go/testing"
+	"sigs.k8s.io/descheduler/test"
+)
+
+func TestEvictPod(t *testing.T) {
+	ctx := context.Background()
+	node1 := test.BuildTestNode("node1", 1000, 2000, 9, nil)
+	pod1 := test.BuildTestPod("p1", 400, 0, "node1", nil)
+	tests := []struct {
+		description string
+		node        *v1.Node
+		pod         *v1.Pod
+		pods        []v1.Pod
+		want        error
+	}{
+		{
+			description: "test pod eviction - pod present",
+			node:        node1,
+			pod:         pod1,
+			pods:        []v1.Pod{*pod1},
+			want:        nil,
+		},
+		{
+			description: "test pod eviction - pod absent",
+			node:        node1,
+			pod:         pod1,
+			pods:        []v1.Pod{*test.BuildTestPod("p2", 400, 0, "node1", nil), *test.BuildTestPod("p3", 450, 0, "node1", nil)},
+			want:        nil,
+		},
+	}
+
+	for _, test := range tests {
+		fakeClient := &fake.Clientset{}
+		fakeClient.Fake.AddReactor("list", "pods", func(action core.Action) (bool, runtime.Object, error) {
+			return true, &v1.PodList{Items: test.pods}, nil
+		})
+		got := evictPod(ctx, fakeClient, test.pod, "v1", false)
+		if got != test.want {
+			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
+		}
+	}
+}
+
+func TestCache(t *testing.T) {
+	uc := UnschedulableCache{cache: map[string]*cache.Cache{}}
+	uc.add("test", "1")
+	time.Sleep(5 * time.Second)
+	uc.add("test", "2")
+	ft := uc.getFreezeTime("test", "1")
+	if ft == nil {
+		t.Fatal("Unexpected results")
+	}
+	t.Log(ft)
+	ft1 := uc.getFreezeTime("test", "2")
+	if ft1 == nil {
+		t.Fatal("Unexpected results")
+	}
+	t.Log(ft1)
+}
