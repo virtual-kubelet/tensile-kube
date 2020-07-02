@@ -1,0 +1,103 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: vk-mutator
+webhooks:
+  - clientConfig:
+      caBundle: ${caBundle}
+      service:
+        name: vk-webhook
+        namespace: kube-system
+        path: /mutate
+    failurePolicy: Fail
+    name: xxx
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
+    sideEffects: None
+---
+apiVersion: v1
+data:
+  cert.pem: ${cert}
+  key.pem: ${key}
+kind: Secret
+metadata:
+  name: wbssecret
+  namespace: kube-system
+type: Opaque
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: vk-mutator
+  name: vk-mutator
+  namespace: kube-system
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 443
+  selector:
+    app: vk-mutator
+  sessionAffinity: None
+  type: ClusterIP
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: vk-mutator
+  name: webhook
+  namespace: kube-system
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vk-mutator
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: vk-mutator
+    spec:
+      containers:
+        - args:
+            - --tlscert=/root/cert.pem
+            - --tlskey=/root/key.pem
+            - --port=443
+            - --v=6
+          image: virtual-webhook:v1.0.0
+          imagePullPolicy: Always
+          name: webhook
+          ports:
+            - containerPort: 443
+              protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /root
+              name: wbssecret
+      dnsPolicy: ClusterFirst
+      volumes:
+        - name: wbssecret
+          secret:
+            defaultMode: 420
+            items:
+              - key: key.pem
+                path: key.pem
+              - key: cert.pem
+                path: cert.pem
+            secretName: wbssecret
