@@ -149,12 +149,15 @@ func trimLabels(labels map[string]string, ignoreLabels []string) map[string]stri
 	if ignoreLabels == nil {
 		return nil
 	}
-	tripedLabels := make(map[string]string, len(ignoreLabels))
+	trippedLabels := make(map[string]string, len(ignoreLabels))
 	for _, key := range ignoreLabels {
-		tripedLabels[key] = labels[key]
+		if labels[key] == "" {
+			continue
+		}
+		trippedLabels[key] = labels[key]
 		delete(labels, key)
 	}
-	return tripedLabels
+	return trippedLabels
 }
 
 func convertAnnotations(annotation map[string]string) *ClustersNodeSelection {
