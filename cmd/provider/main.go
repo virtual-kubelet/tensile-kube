@@ -122,7 +122,7 @@ func RunController(ctx context.Context, master,
 		return nil
 	}
 
-	var runningControllers []controllers.Controller
+	runningControllers := []controllers.Controller{buildCommonControllers(client, masterInformer, clientInformer)}
 
 	controllerSlice := strings.Split(enableControllers, ",")
 	for _, c := range controllerSlice {
@@ -179,6 +179,22 @@ func buildPVControllers(master, client kubernetes.Interface, masterInformer,
 	return controllers.NewPVController(master, client, pvcInformer, pvInformer,
 		clientPVCInformer,
 		clientPVInformer, pvcRateLimiter, pvRateLimiter, hostIP)
+}
+
+func buildCommonControllers(client kubernetes.Interface, masterInformer,
+	clientInformer kubeinformers.SharedInformerFactory) controllers.Controller {
+
+	configMapInformer := masterInformer.Core().V1().ConfigMaps()
+	secretInformer := masterInformer.Core().V1().Secrets()
+
+	clientConfigMapCInformer := clientInformer.Core().V1().ConfigMaps()
+	clientSecretInformer := clientInformer.Core().V1().Secrets()
+
+	configMapRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
+	secretRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
+
+	return controllers.NewCommonController(client, configMapInformer, secretInformer,
+		clientConfigMapCInformer, clientSecretInformer, configMapRateLimiter, secretRateLimiter)
 }
 
 func rateLimiter() workqueue.RateLimiter {
