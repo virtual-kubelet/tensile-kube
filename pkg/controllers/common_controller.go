@@ -674,7 +674,7 @@ func (ctrl *PVController) shouldEnqueue(obj *metav1.ObjectMeta) bool {
 }
 
 func (ctrl *PVController) shouldEnUpperQueue(old, new *v1.PersistentVolumeClaim) bool {
-	if !reflect.DeepEqual(old.Spec.Resources, new.Spec.Resources) {
+	if reflect.DeepEqual(old.Spec.Resources, new.Spec.Resources) {
 		return true
 	}
 	if new.DeletionTimestamp != nil {
