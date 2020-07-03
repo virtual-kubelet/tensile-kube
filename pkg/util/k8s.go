@@ -199,3 +199,18 @@ func GetClusterID(node *corev1.Node) string {
 	}
 	return clusterName
 }
+
+// UpdateConfigMap updates the configMap data
+func UpdateConfigMap(old, new *corev1.ConfigMap) {
+	old.Labels = new.Labels
+	old.Data = new.Data
+	old.BinaryData = new.BinaryData
+}
+
+// UpdateSecret updates the secret data
+func UpdateSecret(old, new *corev1.Secret) {
+	old.Labels = new.Labels
+	old.Data = new.Data
+	old.StringData = new.StringData
+	old.Type = new.Type
+}
