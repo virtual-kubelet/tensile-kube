@@ -191,6 +191,13 @@ func PodForTestWithNodeSelectorAndAffinityClusterID() *v1.Pod {
 				NodeSelectorTerm{{
 				MatchExpressions: []v1.NodeSelectorRequirement{
 					{
+						Key:      "test0",
+						Operator: v1.NodeSelectorOpIn,
+						Values: []string{
+							"aa",
+						},
+					},
+					{
 						Key:      "clusterID",
 						Operator: v1.NodeSelectorOpIn,
 						Values: []string{
@@ -199,6 +206,13 @@ func PodForTestWithNodeSelectorAndAffinityClusterID() *v1.Pod {
 					},
 					{
 						Key:      "test",
+						Operator: v1.NodeSelectorOpIn,
+						Values: []string{
+							"aa",
+						},
+					},
+					{
+						Key:      "test1",
 						Operator: v1.NodeSelectorOpIn,
 						Values: []string{
 							"aa",

@@ -45,7 +45,7 @@ func TrimPod(pod *corev1.Pod, ignoreLabels []string) *corev1.Pod {
 		podCopy.Annotations = make(map[string]string)
 	}
 	podCopy.Labels[VirtualPodLabel] = "true"
-	cns := convertAnnotations(pod.Annotations)
+	cns := ConvertAnnotations(pod.Annotations)
 	// remove selector
 	if cns != nil {
 		podCopy.Spec.NodeSelector = cns.NodeSelector
@@ -80,7 +80,7 @@ func trimContainers(containers []corev1.Container) []corev1.Container {
 	var newContainers []corev1.Container
 
 	for _, c := range containers {
-		volMounts := []corev1.VolumeMount{}
+		var volMounts []corev1.VolumeMount
 		for _, v := range c.VolumeMounts {
 			if strings.HasPrefix(v.Name, "default-token") {
 				continue
@@ -108,7 +108,7 @@ func GetUpdatedPod(orig, update *corev1.Pod, ignoreLabels []string) {
 		update.Annotations = make(map[string]string)
 	}
 	if orig.Annotations[SelectorKey] != update.Annotations[SelectorKey] {
-		if cns := convertAnnotations(update.Annotations); cns != nil {
+		if cns := ConvertAnnotations(update.Annotations); cns != nil {
 			// we assume tolerations would only add not remove
 			orig.Spec.Tolerations = cns.Tolerations
 		}
@@ -145,6 +145,7 @@ func RecoverLabels(labels map[string]string, annotations map[string]string) {
 	}
 }
 
+// trimLabels removes label from labels according to ignoreLabels
 func trimLabels(labels map[string]string, ignoreLabels []string) map[string]string {
 	if ignoreLabels == nil {
 		return nil
@@ -160,7 +161,8 @@ func trimLabels(labels map[string]string, ignoreLabels []string) map[string]stri
 	return trippedLabels
 }
 
-func convertAnnotations(annotation map[string]string) *ClustersNodeSelection {
+// ConvertAnnotations converts annotations to ClustersNodeSelection
+func ConvertAnnotations(annotation map[string]string) *ClustersNodeSelection {
 	if annotation == nil {
 		return nil
 	}
