@@ -226,24 +226,19 @@ func (whsvr *webhookServer) trySetNodeName(pod *corev1.Pod, ns string) {
 
 func inject(pod *corev1.Pod, ignoreKeys []string) {
 	nodeSelector := make(map[string]string)
-
-	if (pod.Spec.NodeSelector == nil || len(pod.Spec.NodeSelector) == 0) &&
+	var affinity *corev1.Affinity
+	if len(pod.Spec.NodeSelector) == 0 &&
 		pod.Spec.Affinity == nil &&
 		pod.Spec.Tolerations == nil {
 		return
 	}
 
-	if pod.Spec.NodeSelector != nil {
-		for _, key := range ignoreKeys {
-			if len(strings.TrimSpace(key)) == 0 {
-				continue
-			}
-			if v := pod.Spec.NodeSelector[key]; v != "" {
-				nodeSelector[key] = v
-				delete(pod.Spec.NodeSelector, key)
-			}
-		}
+	if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
+		affinity = injectAffinity(pod.Spec.Affinity, ignoreKeys)
+	}
 
+	if pod.Spec.NodeSelector != nil {
+		nodeSelector = injectNodeSelector(pod.Spec.NodeSelector, ignoreKeys)
 	}
 
 	cns := util.ClustersNodeSelection{
@@ -263,12 +258,9 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 		pod.Annotations = make(map[string]string)
 	}
 	pod.Annotations[util.SelectorKey] = string(cnsByte)
-	if nodeSelector != nil && len(nodeSelector) != 0 {
-		pod.Spec.NodeSelector = nodeSelector
-	} else {
-		pod.Spec.NodeSelector = nil
-	}
-	pod.Spec.Affinity = nil
+
+	pod.Spec.NodeSelector = nodeSelector
+	pod.Spec.Affinity = affinity
 	pod.Spec.Tolerations = getPodTolerations(pod)
 }
 
@@ -296,4 +288,68 @@ func getPodTolerations(pod *corev1.Pod) []corev1.Toleration {
 		tolerations = append(tolerations, desiredMap[util.TaintNodeUnreachable])
 	}
 	return tolerations
+}
+
+func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) map[string]string {
+	finalNodeSelector := make(map[string]string)
+	for _, key := range ignoreLabels {
+		if len(strings.TrimSpace(key)) == 0 {
+			continue
+		}
+		if v := nodeSelector[key]; v != "" {
+			finalNodeSelector[key] = v
+			delete(nodeSelector, key)
+		}
+	}
+	return finalNodeSelector
+}
+
+func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Affinity {
+	if affinity.NodeAffinity == nil {
+		return nil
+	}
+	if affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		return nil
+	}
+	required := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	requiredCopy := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.DeepCopy()
+	var nodeSelectorTerm []corev1.NodeSelectorTerm
+	for _, key := range ignoreLabels {
+		for termIdx, term := range requiredCopy.NodeSelectorTerms {
+			var mes, mfs []corev1.NodeSelectorRequirement
+			for meIdx, me := range term.MatchExpressions {
+				if me.Key != key {
+					continue
+				}
+				mes = append(mes, *me.DeepCopy())
+				required.
+					NodeSelectorTerms[termIdx].MatchExpressions = append(required.
+					NodeSelectorTerms[termIdx].MatchExpressions[:meIdx], required.
+					NodeSelectorTerms[termIdx].MatchExpressions[meIdx+1:]...)
+			}
+
+			for mfIdx, mf := range term.MatchFields {
+				if mf.Key != key {
+					continue
+				}
+				mfs = append(mfs, *mf.DeepCopy())
+				required.
+					NodeSelectorTerms[termIdx].MatchFields = append(required.
+					NodeSelectorTerms[termIdx].MatchFields[:mfIdx],
+					required.NodeSelectorTerms[termIdx].MatchFields[mfIdx+1:]...)
+			}
+			if len(mfs) != 0 || len(mes) != 0 {
+				nodeSelectorTerm = append(nodeSelectorTerm, corev1.NodeSelectorTerm{MatchFields: mfs, MatchExpressions: mes})
+			}
+		}
+
+	}
+	affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = required
+	if len(nodeSelectorTerm) == 0 {
+		return nil
+	}
+
+	return &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: nodeSelectorTerm},
+	}}
 }

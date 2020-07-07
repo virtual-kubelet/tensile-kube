@@ -181,17 +181,24 @@ func PodForTestWithNodeSelectorClusterID() *v1.Pod {
 	return pod
 }
 
-// PodForTestWithAffinity return a basic pod for test with Affinity
-func PodForTestWithAffinity() *v1.Pod {
+// PodForTestWithNodeSelectorAndAffinityClusterID return a basic pod for test with NodeSelectorClusterID
+func PodForTestWithNodeSelectorAndAffinityClusterID() *v1.Pod {
 	pod := PodForTest()
-	pod.Spec.NodeSelector = map[string]string{"testbase": "testbase"}
+	pod.Spec.NodeSelector = map[string]string{"testbase": "testbase", "clusterID": "1"}
 	pod.Spec.Affinity = &v1.Affinity{
 		NodeAffinity: &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.
 				NodeSelectorTerm{{
 				MatchExpressions: []v1.NodeSelectorRequirement{
 					{
-						Key:      "testbase",
+						Key:      "clusterID",
+						Operator: v1.NodeSelectorOpIn,
+						Values: []string{
+							"aa",
+						},
+					},
+					{
+						Key:      "test",
 						Operator: v1.NodeSelectorOpIn,
 						Values: []string{
 							"aa",
@@ -223,4 +230,28 @@ func NodeForTest() *v1.Node {
 			},
 		},
 	}
+}
+
+// PodForTestWithAffinity return a basic pod for test with Affinity
+func PodForTestWithAffinity() *v1.Pod {
+	pod := PodForTest()
+	pod.Spec.NodeSelector = map[string]string{"testbase": "testbase"}
+	pod.Spec.Affinity = &v1.Affinity{
+		NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.
+				NodeSelectorTerm{{
+				MatchExpressions: []v1.NodeSelectorRequirement{
+					{
+						Key:      "testbase",
+						Operator: v1.NodeSelectorOpIn,
+						Values: []string{
+							"aa",
+						},
+					},
+				},
+			}}},
+			PreferredDuringSchedulingIgnoredDuringExecution: nil,
+		},
+	}
+	return pod
 }
