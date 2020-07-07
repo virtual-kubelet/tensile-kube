@@ -92,12 +92,68 @@ func TestInject(t *testing.T) {
 			},
 		},
 		{
-			name: "Pod For Tes tWith Node Selector with clusterID",
+			name: "Pod For Test With Node Selector with clusterID",
 			pod:  test.PodForTestWithNodeSelectorClusterID(),
 			desireCNS: util.ClustersNodeSelection{
 				NodeSelector: map[string]string{"testbase": "testbase"},
 			},
 			keys: []string{util.ClusterID},
+		},
+		{
+			name: "Pod For Test With Node Selector and Affinity with clusterID",
+			pod:  test.PodForTestWithNodeSelectorAndAffinityClusterID(),
+			desireCNS: util.ClustersNodeSelection{
+				NodeSelector: map[string]string{"testbase": "testbase"},
+				Affinity: &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.
+							NodeSelectorTerm{{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "test",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+							},
+						}}},
+						PreferredDuringSchedulingIgnoredDuringExecution: nil,
+					},
+				},
+			},
+			keys: []string{util.ClusterID},
+		},
+		{
+			name: "Pod For Test With Node Selector and Affinity without match labels",
+			pod:  test.PodForTestWithNodeSelectorAndAffinityClusterID(),
+			desireCNS: util.ClustersNodeSelection{
+				NodeSelector: map[string]string{"testbase": "testbase", "clusterID": "1"},
+				Affinity: &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.
+							NodeSelectorTerm{{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "clusterID",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+								{
+									Key:      "test",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+							},
+						}}},
+						PreferredDuringSchedulingIgnoredDuringExecution: nil,
+					},
+				},
+			},
 		},
 		{
 			name: "Pod For Test With Affinity",
