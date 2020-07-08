@@ -40,7 +40,7 @@ type clientCache struct {
 	nodeLister   v1.NodeLister
 }
 
-// VirtualK8S is the key struct to implement the tensile kubernetess
+// VirtualK8S is the key struct to implement the tensile kubernetes
 type VirtualK8S struct {
 	master       kubernetes.Interface
 	client       kubernetes.Interface
@@ -58,7 +58,7 @@ type VirtualK8S struct {
 }
 
 // NewVirtualK8S reads a kubeconfig file and sets up a client to interact
-// with another cluster.
+// with lower cluster
 func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 	ignoreLabelsStr string, opts *opts.Opts) (*VirtualK8S, error) {
 	ignoreLabels := strings.Split(ignoreLabelsStr, ",")
