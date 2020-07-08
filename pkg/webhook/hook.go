@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strings"
 
 	"k8s.io/api/admission/v1beta1"
 	admissionregistrationv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -242,8 +241,8 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 	}
 
 	cns := util.ClustersNodeSelection{
-		NodeSelector: pod.Spec.NodeSelector,
-		Affinity:     pod.Spec.Affinity,
+		NodeSelector: nodeSelector,
+		Affinity:     affinity,
 		Tolerations:  pod.Spec.Tolerations,
 	}
 	cnsByte, err := json.Marshal(cns)
@@ -259,8 +258,6 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 	}
 	pod.Annotations[util.SelectorKey] = string(cnsByte)
 
-	pod.Spec.NodeSelector = nodeSelector
-	pod.Spec.Affinity = affinity
 	pod.Spec.Tolerations = getPodTolerations(pod)
 }
 
@@ -290,21 +287,31 @@ func getPodTolerations(pod *corev1.Pod) []corev1.Toleration {
 	return tolerations
 }
 
+// injectNodeSelector reserve  ignoreLabels in nodeSelector, others would be removed
 func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) map[string]string {
+	nodeSelectorBackup := make(map[string]string)
 	finalNodeSelector := make(map[string]string)
-	for _, key := range ignoreLabels {
-		if len(strings.TrimSpace(key)) == 0 {
-			continue
-		}
-		if v := nodeSelector[key]; v != "" {
-			finalNodeSelector[key] = v
-			delete(nodeSelector, key)
+	labelMap := make(map[string]string)
+	for _, v := range ignoreLabels {
+		labelMap[v] = v
+	}
+	for k, v := range nodeSelector {
+		// not found in label, delete
+		if labelMap[k] != "" {
+			nodeSelectorBackup[k] = v
+		} else {
+			finalNodeSelector[k] = v
 		}
 	}
+	nodeSelector = nodeSelectorBackup
 	return finalNodeSelector
 }
 
 func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Affinity {
+	labelMap := make(map[string]string)
+	for _, v := range ignoreLabels {
+		labelMap[v] = v
+	}
 	if affinity.NodeAffinity == nil {
 		return nil
 	}
@@ -314,33 +321,38 @@ func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Af
 	required := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 	requiredCopy := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.DeepCopy()
 	var nodeSelectorTerm []corev1.NodeSelectorTerm
-	for _, key := range ignoreLabels {
-		for termIdx, term := range requiredCopy.NodeSelectorTerms {
-			var mes, mfs []corev1.NodeSelectorRequirement
-			for meIdx, me := range term.MatchExpressions {
-				if me.Key != key {
-					continue
-				}
-				mes = append(mes, *me.DeepCopy())
-				required.
-					NodeSelectorTerms[termIdx].MatchExpressions = append(required.
-					NodeSelectorTerms[termIdx].MatchExpressions[:meIdx], required.
-					NodeSelectorTerms[termIdx].MatchExpressions[meIdx+1:]...)
+	for termIdx, term := range requiredCopy.NodeSelectorTerms {
+		var mes, mfs []corev1.NodeSelectorRequirement
+		var mesDeleteCount, mfsDeleteCount int
+		for meIdx, me := range term.MatchExpressions {
+			if labelMap[me.Key] != "" {
+				// found key, do not delete
+				continue
+			}
+			mes = append(mes, *me.DeepCopy())
+
+			required.
+				NodeSelectorTerms[termIdx].MatchExpressions = append(required.
+				NodeSelectorTerms[termIdx].MatchExpressions[:meIdx-mesDeleteCount], required.
+				NodeSelectorTerms[termIdx].MatchExpressions[meIdx-mesDeleteCount+1:]...)
+			mesDeleteCount++
+		}
+
+		for mfIdx, mf := range term.MatchFields {
+			if labelMap[mf.Key] != "" {
+				// found key, do not delete
+				continue
 			}
 
-			for mfIdx, mf := range term.MatchFields {
-				if mf.Key != key {
-					continue
-				}
-				mfs = append(mfs, *mf.DeepCopy())
-				required.
-					NodeSelectorTerms[termIdx].MatchFields = append(required.
-					NodeSelectorTerms[termIdx].MatchFields[:mfIdx],
-					required.NodeSelectorTerms[termIdx].MatchFields[mfIdx+1:]...)
-			}
-			if len(mfs) != 0 || len(mes) != 0 {
-				nodeSelectorTerm = append(nodeSelectorTerm, corev1.NodeSelectorTerm{MatchFields: mfs, MatchExpressions: mes})
-			}
+			mfs = append(mfs, *mf.DeepCopy())
+			required.
+				NodeSelectorTerms[termIdx].MatchFields = append(required.
+				NodeSelectorTerms[termIdx].MatchFields[:mfIdx-mesDeleteCount],
+				required.NodeSelectorTerms[termIdx].MatchFields[mfIdx-mfsDeleteCount+1:]...)
+			mfsDeleteCount++
+		}
+		if len(mfs) != 0 || len(mes) != 0 {
+			nodeSelectorTerm = append(nodeSelectorTerm, corev1.NodeSelectorTerm{MatchFields: mfs, MatchExpressions: mes})
 		}
 
 	}

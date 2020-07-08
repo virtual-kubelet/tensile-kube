@@ -110,7 +110,21 @@ func TestInject(t *testing.T) {
 							NodeSelectorTerm{{
 							MatchExpressions: []v1.NodeSelectorRequirement{
 								{
+									Key:      "test0",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+								{
 									Key:      "test",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+								{
+									Key:      "test1",
 									Operator: v1.NodeSelectorOpIn,
 									Values: []string{
 										"aa",
@@ -135,6 +149,13 @@ func TestInject(t *testing.T) {
 							NodeSelectorTerm{{
 							MatchExpressions: []v1.NodeSelectorRequirement{
 								{
+									Key:      "test0",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+								{
 									Key:      "clusterID",
 									Operator: v1.NodeSelectorOpIn,
 									Values: []string{
@@ -148,12 +169,51 @@ func TestInject(t *testing.T) {
 										"aa",
 									},
 								},
+								{
+									Key:      "test1",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
 							},
 						}}},
 						PreferredDuringSchedulingIgnoredDuringExecution: nil,
 					},
 				},
 			},
+		},
+		{
+			name: "Pod For Test With Node Selector and Affinity with multi match labels",
+			pod:  test.PodForTestWithNodeSelectorAndAffinityClusterID(),
+			desireCNS: util.ClustersNodeSelection{
+				NodeSelector: map[string]string{"testbase": "testbase"},
+				Affinity: &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{NodeSelectorTerms: []v1.
+							NodeSelectorTerm{{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "test",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+								{
+									Key:      "test1",
+									Operator: v1.NodeSelectorOpIn,
+									Values: []string{
+										"aa",
+									},
+								},
+							},
+						}}},
+						PreferredDuringSchedulingIgnoredDuringExecution: nil,
+					},
+				},
+			},
+			keys: []string{"clusterID", "test0"},
 		},
 		{
 			name: "Pod For Test With Affinity",
@@ -189,8 +249,10 @@ func TestInject(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Logf("ann: %v", str)
 		if !reflect.DeepEqual(cns, c.desireCNS) {
 			t.Fatalf("Desire: %v, Get: %v", c.desireCNS, cns)
 		}
+		t.Logf("Desire: %v, Get: %v", c.desireCNS, cns)
 	}
 }
