@@ -148,10 +148,7 @@ func NewClient(configPath string, opts ...Opts) (kubernetes.Interface, error) {
 	)
 	config, err = clientcmd.BuildConfigFromFlags("", configPath)
 	if err != nil {
-		config, err = rest.InClusterConfig()
-		if err != nil {
-			return nil, fmt.Errorf("could not read config file for cluster: %v", err)
-		}
+		return nil, fmt.Errorf("could not read config file for cluster: %v", err)
 	}
 
 	for _, opt := range opts {
