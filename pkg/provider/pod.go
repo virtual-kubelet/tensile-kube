@@ -337,7 +337,7 @@ func (v *VirtualK8S) NotifyPods(ctx context.Context, cb func(*corev1.Pod)) {
 // createSecrets takes a Kubernetes Pod and deploys it within the provider.
 func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns string) error {
 	for _, secretName := range secrets {
-		old, err := v.clientCache.secretLister.Secrets(ns).Get(secretName)
+		_, err := v.clientCache.secretLister.Secrets(ns).Get(secretName)
 		if err == nil {
 			continue
 		}
@@ -356,10 +356,6 @@ func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns str
 			_, err = v.client.CoreV1().Secrets(ns).Create(secret)
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
-					util.UpdateSecret(old, secret)
-					if _, err = v.client.CoreV1().Secrets(ns).Update(old); err != nil {
-						klog.Error(err)
-					}
 					continue
 				}
 				klog.Errorf("Failed to create secret %v err: %v", secretName, err)
@@ -374,7 +370,7 @@ func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns str
 // createConfigMaps a Kubernetes Pod and deploys it within the provider.
 func (v *VirtualK8S) createConfigMaps(ctx context.Context, configmaps []string, ns string) error {
 	for _, cm := range configmaps {
-		old, err := v.clientCache.cmLister.ConfigMaps(ns).Get(cm)
+		_, err := v.clientCache.cmLister.ConfigMaps(ns).Get(cm)
 		if err == nil {
 			continue
 		}
@@ -389,10 +385,6 @@ func (v *VirtualK8S) createConfigMaps(ctx context.Context, configmaps []string, 
 			_, err = v.client.CoreV1().ConfigMaps(ns).Create(configMap)
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
-					util.UpdateConfigMap(old, configMap)
-					if _, err = v.client.CoreV1().ConfigMaps(ns).Update(old); err != nil {
-						klog.Error(err)
-					}
 					continue
 				}
 				klog.Errorf("Failed to create configmap %v err: %v", cm, err)
