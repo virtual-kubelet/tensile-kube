@@ -85,6 +85,7 @@ func NewCommonController(client kubernetes.Interface,
 		clientSecretListerSynced:    clientSecretInformer.Informer().HasSynced,
 	}
 	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    ctrl.configMapAdd,
 		UpdateFunc: ctrl.configMapUpdated,
 		DeleteFunc: ctrl.configMapDeleted,
 	})
@@ -92,6 +93,8 @@ func NewCommonController(client kubernetes.Interface,
 	ctrl.masterConfigMapListerSynced = configMapInformer.Informer().HasSynced
 
 	secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    ctrl.secretAdd,
+		UpdateFunc: ctrl.secretUpdated,
 		DeleteFunc: ctrl.secretDeleted,
 	})
 	ctrl.masterSecretLister = secretInformer.Lister()
@@ -118,6 +121,22 @@ func (ctrl *CommonController) Run(workers int, stopCh <-chan struct{}) {
 		go wait.Until(ctrl.syncSecret, 0, stopCh)
 	}
 	<-stopCh
+}
+
+// configMapAdd reacts to a ConfigMap add
+func (ctrl *CommonController) configMapAdd(obj interface{}) {
+	configMap := obj.(*v1.ConfigMap)
+	if ctrl.shouldEnqueue(&configMap.ObjectMeta) {
+		key, err := cache.MetaNamespaceKeyFunc(obj)
+		if err != nil {
+			runtime.HandleError(err)
+			return
+		}
+		ctrl.configMapQueue.Add(key)
+		klog.V(6).Info("ConfigMap add in master", "key ", key)
+	} else {
+		klog.V(6).Infof("Ignoring configMap %q add", configMap.Name)
+	}
 }
 
 // configMapUpdated reacts to a ConfigMap update
@@ -153,11 +172,27 @@ func (ctrl *CommonController) configMapDeleted(obj interface{}) {
 	}
 }
 
+// secretAdd reacts to a Secret add
+func (ctrl *CommonController) secretAdd(obj interface{}) {
+	secret := obj.(*v1.Secret)
+	if ctrl.shouldEnqueue(&secret.ObjectMeta) {
+		key, err := cache.MetaNamespaceKeyFunc(secret)
+		if err != nil {
+			runtime.HandleError(err)
+			return
+		}
+		ctrl.secretQueue.Add(key)
+		klog.V(6).Info("Secret add in master", "key ", key)
+	} else {
+		klog.V(6).Infof("Ignoring secret %q add", secret.Name)
+	}
+}
+
 // secretUpdated reacts to a Secret update
 func (ctrl *CommonController) secretUpdated(old, new interface{}) {
-	newSecret := new.(*v1.ConfigMap)
-	oldSecret := old.(*v1.ConfigMap)
-	if ctrl.shouldEnqueueUpdateConfigMap(oldSecret, newSecret) {
+	newSecret := new.(*v1.Secret)
+	oldSecret := old.(*v1.Secret)
+	if ctrl.shouldEnqueueUpdateSecret(oldSecret, newSecret) {
 		key, err := cache.MetaNamespaceKeyFunc(new)
 		if err != nil {
 			runtime.HandleError(err)
@@ -246,6 +281,10 @@ func (ctrl *CommonController) syncConfigMap() {
 	var old *v1.ConfigMap
 	old, err = ctrl.clientConfigMapLister.ConfigMaps(namespace).Get(configMapName)
 	if err != nil {
+		if apierrs.IsNotFound(err) {
+			err = nil
+			return
+		}
 		klog.Errorf("Get configMap from client cluster failed, error: %v", err)
 		return
 	}
@@ -316,8 +355,12 @@ func (ctrl *CommonController) syncSecret() {
 
 	// data updated
 	var old *v1.Secret
-	old, err = ctrl.masterSecretLister.Secrets(namespace).Get(secretName)
+	old, err = ctrl.clientSecretLister.Secrets(namespace).Get(secretName)
 	if err != nil {
+		if apierrs.IsNotFound(err) {
+			err = nil
+			return
+		}
 		klog.Errorf("Get secret from client cluster failed, error: %v", err)
 		return
 	}
@@ -369,6 +412,16 @@ func (ctrl *CommonController) shouldEnqueueUpdateSecret(old, new *v1.Secret) boo
 		return true
 	}
 	return false
+}
+
+func (ctrl *CommonController) shouldEnqueueAddSecret(secret *v1.Secret) bool {
+	if !ctrl.shouldEnqueue(&secret.ObjectMeta) {
+		return false
+	}
+	if secret.Type == v1.SecretTypeServiceAccountToken {
+		return false
+	}
+	return true
 }
 
 func (ctrl *CommonController) gcConfigMap() {
