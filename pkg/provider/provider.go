@@ -64,15 +64,15 @@ func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 	ignoreLabelsStr string, enableServiceAccount bool, opts *opts.Opts) (*VirtualK8S, error) {
 	ignoreLabels := strings.Split(ignoreLabelsStr, ",")
 	if len(cc.ClientKubeConfigPath) == 0 {
-		panic("client kube config path can not be empty")
+		panic("client kubeconfig path can not be empty")
 	}
 	// client config
-	var clietnConfig *rest.Config
+	var clientConfig *rest.Config
 	client, err := util.NewClient(cc.ClientKubeConfigPath, func(config *rest.Config) {
 		config.QPS = float32(cc.KubeClientQPS)
 		config.Burst = cc.KubeClientBurst
 		// Set config for clientConfig
-		clietnConfig = config
+		clientConfig = config
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not build clientset for cluster: %v", err)
@@ -108,7 +108,7 @@ func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 		ignoreLabels:         ignoreLabels,
 		version:              serverVersion.GitVersion,
 		daemonPort:           cfg.DaemonPort,
-		config:               clietnConfig,
+		config:               clientConfig,
 		enableServiceAccount: enableServiceAccount,
 		clientCache: clientCache{
 			podLister:    podInformer.Lister(),
