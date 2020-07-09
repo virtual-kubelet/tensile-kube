@@ -42,13 +42,14 @@ import (
 )
 
 var (
-	buildVersion      = "N/A"
-	buildTime         = "N/A"
-	k8sVersion        = "v1.14.3"
-	numberOfWorkers   = 50
-	ignoreLabels      = ""
-	disableRBAC       = false
-	enableControllers = ""
+	buildVersion         = "N/A"
+	buildTime            = "N/A"
+	k8sVersion           = "v1.14.3"
+	numberOfWorkers      = 50
+	ignoreLabels         = ""
+	disableRBAC          = false
+	enableControllers    = ""
+	enableServiceAccount = true
 )
 
 func main() {
@@ -64,6 +65,9 @@ func main() {
 			")", util.BatchPodLabel))
 	flags.StringVar(&enableControllers, "enable-controllers", "PVControllers,ServiceControllers",
 		"support PVControllers,ServiceControllers, default, all of these")
+
+	flags.BoolVar(&enableServiceAccount, "enable-serviceaccount", true,
+		"enable service account for pods, like spark driver, mpi launcher")
 
 	logger := logrus.StandardLogger()
 
@@ -82,7 +86,7 @@ func main() {
 		cli.WithBaseOpts(o),
 		cli.WithProvider("k8s", func(cfg provider.InitConfig) (provider.Provider, error) {
 			cfg.ConfigPath = o.KubeConfigPath
-			provider, err := k8sprovider.NewVirtualK8S(cfg, &cc, ignoreLabels, o)
+			provider, err := k8sprovider.NewVirtualK8S(cfg, &cc, ignoreLabels, enableServiceAccount, o)
 			if err == nil {
 				go RunController(ctx, provider.GetMaster(),
 					provider.GetClient(), provider.GetNameSpaceList(), cfg.NodeName, numberOfWorkers)

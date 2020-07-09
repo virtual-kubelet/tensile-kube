@@ -337,7 +337,7 @@ func (v *VirtualK8S) NotifyPods(ctx context.Context, cb func(*corev1.Pod)) {
 // createSecrets takes a Kubernetes Pod and deploys it within the provider.
 func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns string) error {
 	for _, secretName := range secrets {
-		old, err := v.clientCache.secretLister.Secrets(ns).Get(secretName)
+		_, err := v.clientCache.secretLister.Secrets(ns).Get(secretName)
 		if err == nil {
 			continue
 		}
@@ -350,16 +350,65 @@ func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns str
 			util.TrimObjectMeta(&secret.ObjectMeta)
 			// skip service account secret
 			if secret.Type == corev1.SecretTypeServiceAccountToken {
-				continue
+				if !v.enableServiceAccount {
+					continue
+				}
+				if secret.Annotations == nil {
+					return fmt.Errorf("parse secret service account error")
+				}
+				klog.Infof("secret service-account info: [%v]", secret.Annotations)
+				accountName, _ := secret.Annotations[corev1.ServiceAccountNameKey]
+				if accountName == "" {
+					klog.Errorf("get secret serviceAccount err: [%v] [%s] [%v]",
+						err, secret.Name, secret.Annotations)
+					return err
+				}
+				klog.Infof("secret [%s] accountName info:[%s] [%v]", secret.Name, accountName, secret.Annotations)
+
+				sa, err := v.client.CoreV1().ServiceAccounts(ns).Get(accountName, metav1.GetOptions{})
+				if err != nil || sa == nil {
+					klog.Infof("get serviceAccount [%v] err: [%v]]", sa, err)
+					sa, err = v.client.CoreV1().ServiceAccounts(ns).Create(&corev1.ServiceAccount{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: accountName,
+						},
+					})
+					klog.Errorf("create serviceAccount [%v] err: [%v]", sa, err)
+					if err != nil {
+						if errors.IsAlreadyExists(err) {
+							continue
+						}
+						return err
+					}
+				} else {
+					klog.Infof("get secret serviceAccount info: [%s] [%v] [%v] [%v]",
+						sa.Name, sa.CreationTimestamp, sa.Annotations, sa.UID)
+				}
+				secret.UID = sa.UID
+				secret.Annotations[corev1.ServiceAccountNameKey] = accountName
+				secret.Annotations[corev1.ServiceAccountUIDKey] = string(sa.UID)
+				_, err = v.client.CoreV1().Secrets(ns).Create(secret)
+				if err != nil {
+					if errors.IsAlreadyExists(err) {
+						continue
+					}
+					klog.Errorf("Failed to create secret %v err: %v", secretName, err)
+				}
+
+				sa.Secrets = []corev1.ObjectReference{{Name: secret.Name}}
+
+				_, err = v.client.CoreV1().ServiceAccounts(ns).Update(sa)
+				if err != nil {
+					klog.Infof(
+						"update serviceAccount [%v] err: [%v]]",
+						sa, err)
+					return err
+				}
 			}
 			controllers.SetObjectGlobal(&secret.ObjectMeta)
 			_, err = v.client.CoreV1().Secrets(ns).Create(secret)
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
-					util.UpdateSecret(old, secret)
-					if _, err = v.client.CoreV1().Secrets(ns).Update(old); err != nil {
-						klog.Error(err)
-					}
 					continue
 				}
 				klog.Errorf("Failed to create secret %v err: %v", secretName, err)
@@ -374,7 +423,7 @@ func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns str
 // createConfigMaps a Kubernetes Pod and deploys it within the provider.
 func (v *VirtualK8S) createConfigMaps(ctx context.Context, configmaps []string, ns string) error {
 	for _, cm := range configmaps {
-		old, err := v.clientCache.cmLister.ConfigMaps(ns).Get(cm)
+		_, err := v.clientCache.cmLister.ConfigMaps(ns).Get(cm)
 		if err == nil {
 			continue
 		}
@@ -389,10 +438,6 @@ func (v *VirtualK8S) createConfigMaps(ctx context.Context, configmaps []string, 
 			_, err = v.client.CoreV1().ConfigMaps(ns).Create(configMap)
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
-					util.UpdateConfigMap(old, configMap)
-					if _, err = v.client.CoreV1().ConfigMaps(ns).Update(old); err != nil {
-						klog.Error(err)
-					}
 					continue
 				}
 				klog.Errorf("Failed to create configmap %v err: %v", cm, err)

@@ -42,25 +42,26 @@ type clientCache struct {
 
 // VirtualK8S is the key struct to implement the tensile kubernetes
 type VirtualK8S struct {
-	master       kubernetes.Interface
-	client       kubernetes.Interface
-	config       *rest.Config
-	nodeName     string
-	version      string
-	daemonPort   int32
-	ignoreLabels []string
-	clientCache  clientCache
-	rm           *manager.ResourceManager
-	updatedNode  chan *corev1.Node
-	updatedPod   chan *corev1.Pod
-	stopCh       <-chan struct{}
-	providerNode *common.ProviderNode
+	master               kubernetes.Interface
+	client               kubernetes.Interface
+	config               *rest.Config
+	nodeName             string
+	version              string
+	daemonPort           int32
+	ignoreLabels         []string
+	clientCache          clientCache
+	rm                   *manager.ResourceManager
+	updatedNode          chan *corev1.Node
+	updatedPod           chan *corev1.Pod
+	enableServiceAccount bool
+	stopCh               <-chan struct{}
+	providerNode         *common.ProviderNode
 }
 
 // NewVirtualK8S reads a kubeconfig file and sets up a client to interact
 // with lower cluster
 func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
-	ignoreLabelsStr string, opts *opts.Opts) (*VirtualK8S, error) {
+	ignoreLabelsStr string, enableServiceAccount bool, opts *opts.Opts) (*VirtualK8S, error) {
 	ignoreLabels := strings.Split(ignoreLabelsStr, ",")
 	if len(cc.ClientKubeConfigPath) == 0 {
 		panic("client kubeconfig path can not be empty")
@@ -101,13 +102,14 @@ func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 	ctx := context.TODO()
 
 	virtualK8S := &VirtualK8S{
-		master:       master,
-		client:       client,
-		nodeName:     cfg.NodeName,
-		ignoreLabels: ignoreLabels,
-		version:      serverVersion.GitVersion,
-		daemonPort:   cfg.DaemonPort,
-		config:       clientConfig,
+		master:               master,
+		client:               client,
+		nodeName:             cfg.NodeName,
+		ignoreLabels:         ignoreLabels,
+		version:              serverVersion.GitVersion,
+		daemonPort:           cfg.DaemonPort,
+		config:               clietnConfig,
+		enableServiceAccount: enableServiceAccount,
 		clientCache: clientCache{
 			podLister:    podInformer.Lister(),
 			nsLister:     nsInformer.Lister(),

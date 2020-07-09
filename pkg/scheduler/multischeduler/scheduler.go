@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -103,12 +104,19 @@ func (m MultiSchedulingPlugin) Filter(pc *framework.PluginContext, pod *v1.Pod, 
 	}
 
 	podCopy := pod.DeepCopy()
-	if podCopy.Spec.NodeSelector != nil {
+
+	cns := util.ConvertAnnotations(podCopy.Annotations)
+	// remove selector
+	if cns != nil {
+		podCopy.Spec.NodeSelector = cns.NodeSelector
+		podCopy.Spec.Affinity = cns.Affinity
+		podCopy.Spec.Tolerations = cns.Tolerations
+	} else {
 		podCopy.Spec.NodeSelector = nil
-	}
-	if podCopy.Spec.Affinity != nil {
 		podCopy.Spec.Affinity = nil
+		podCopy.Spec.Tolerations = nil
 	}
+
 	result, err := scheduler.Algorithm.Schedule(podCopy, pc)
 	klog.V(5).Infof("%v Nodes, Node %s can be scheduled to run pod", result.FeasibleNodes, result.SuggestedHost)
 	if err != nil {
