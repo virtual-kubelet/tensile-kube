@@ -296,14 +296,16 @@ func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) m
 		labelMap[v] = v
 	}
 	for k, v := range nodeSelector {
+		nodeSelectorBackup[k] = v
+	}
+	for k, v := range nodeSelector {
 		// not found in label, delete
 		if labelMap[k] != "" {
-			nodeSelectorBackup[k] = v
-		} else {
-			finalNodeSelector[k] = v
+			continue
 		}
+		delete(nodeSelector, k)
+		finalNodeSelector[k] = v
 	}
-	nodeSelector = nodeSelectorBackup
 	return finalNodeSelector
 }
 
