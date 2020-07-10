@@ -33,7 +33,7 @@ vet:
 
 provider:
 	mkdir -p bin
-	GOOS=linux CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.buildVersion=$(VERSION)' -X 'main.buildTime=${BUILD_TIME}'" -o ./bin/virtual-node ./cmd/provider
+	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.buildVersion=$(VERSION)' -X 'main.buildTime=${BUILD_TIME}'" -o ./bin/virtual-node ./cmd/provider
 
 scheduler:
 	mkdir -p bin
@@ -41,11 +41,11 @@ scheduler:
 
 webhook:
 	mkdir -p bin
-	GOOS=linux CGO_ENABLED=0 go build -ldflags "-X 'github.com/virtual-kubelet/tensile-kube/cmd/webhook/app.Version=$(VERSION)'" -o ./bin/webhook ./cmd/webhook
+	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'github.com/virtual-kubelet/tensile-kube/cmd/webhook/app.Version=$(VERSION)'" -o ./bin/webhook ./cmd/webhook
 
 descheduler:
 	mkdir -p bin
-	GOOS=linux CGO_ENABLED=0 go build -ldflags "-X 'github.com/virtual-kubelet/tensile-kube/cmd/descheduler/app.version=$(VERSION)'" -o ./bin/descheduler ./cmd/descheduler
+	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'github.com/virtual-kubelet/tensile-kube/cmd/descheduler/app.version=$(VERSION)'" -o ./bin/descheduler ./cmd/descheduler
 
 container: container-provider container-webhook container-descheduler
 
