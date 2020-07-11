@@ -243,7 +243,10 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 
 func (v *VirtualK8S) updateVKCapacityFromNode(old, new *corev1.Node) {
 	oldStatus, newStatus := compareNodeStatusReady(old, new)
-	toRemove := common.ConvertResource(new.Status.Capacity)
+	if !oldStatus && !newStatus {
+		return
+	}
+	toRemove := common.ConvertResource(old.Status.Capacity)
 	toAdd := common.ConvertResource(new.Status.Capacity)
 	nodeCopy := v.providerNode.DeepCopy()
 	if old.Spec.Unschedulable && !new.Spec.Unschedulable || newStatus && !oldStatus {

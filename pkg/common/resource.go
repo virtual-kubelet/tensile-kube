@@ -19,6 +19,7 @@ package common
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/klog"
 )
 
 // CustomResources is a key-value map for defining custom resources
@@ -142,6 +143,7 @@ func (r *Resource) SetCapacityToNode(node *corev1.Node) {
 	}
 
 	node.Status.Allocatable = node.Status.Capacity.DeepCopy()
+	klog.Infof("%v", node.Status.Capacity)
 }
 
 // ConvertResource converts ResourceList to Resource
