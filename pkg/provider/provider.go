@@ -157,10 +157,13 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				nodeCopy := v.providerNode.DeepCopy()
-				toAdd := common.ConvertResource(obj.(*corev1.Node).Status.Capacity)
+				addNode := obj.(*corev1.Node).DeepCopy()
+				toAdd := common.ConvertResource(addNode.Status.Capacity)
 				if err := v.providerNode.AddResource(toAdd); err != nil {
 					return
 				}
+				// resource we did not add when ConfigureNode should sub
+				v.providerNode.SubResource(v.getResourceFromPodsByNodeName(addNode.Name))
 				if !reflect.DeepEqual(nodeCopy, v.providerNode) {
 					v.updatedNode <- v.providerNode.Node
 				}
@@ -168,18 +171,23 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				old, ok1 := oldObj.(*corev1.Node)
 				new, ok2 := newObj.(*corev1.Node)
+				oldCopy := old.DeepCopy()
+				newCopy := new.DeepCopy()
 				if !ok1 || !ok2 {
 					return
 				}
 				klog.V(5).Infof("Node %v updated", old.Name)
-				v.updateVKCapacityFromNode(old, new)
+				v.updateVKCapacityFromNode(oldCopy, newCopy)
 			},
 			DeleteFunc: func(obj interface{}) {
 				nodeCopy := v.providerNode.DeepCopy()
-				toRemove := common.ConvertResource(obj.(*corev1.Node).Status.Capacity)
+				deleteNode := obj.(*corev1.Node).DeepCopy()
+				toRemove := common.ConvertResource(deleteNode.Status.Capacity)
 				if err := v.providerNode.SubResource(toRemove); err != nil {
 					return
 				}
+				// resource we did not add when ConfigureNode should add
+				v.providerNode.AddResource(v.getResourceFromPodsByNodeName(deleteNode.Name))
 				if !reflect.DeepEqual(nodeCopy, v.providerNode) {
 					v.updatedNode <- v.providerNode.Node
 				}
@@ -196,19 +204,20 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 				if !ok {
 					return
 				}
-				util.TrimObjectMeta(&pod.ObjectMeta)
-				if !util.IsVirtualPod(pod) {
+				podCopy := pod.DeepCopy()
+				util.TrimObjectMeta(&podCopy.ObjectMeta)
+				if !util.IsVirtualPod(podCopy) {
 					if v.providerNode.Node == nil {
 						return
 					}
 					// Pod created only by lower cluster
 					// we should change the node resource
-					if len(pod.Spec.NodeName) != 0 {
-						podResource := util.GetRequestFromPod(pod)
+					if len(podCopy.Spec.NodeName) != 0 {
+						podResource := util.GetRequestFromPod(podCopy)
 						podResource.Pods = resource.MustParse("1")
 						v.providerNode.SubResource(podResource)
 						klog.Infof("Lower cluster add pod %s, resource: %v, node: %v",
-							pod.Name, podResource, v.providerNode.Status.Capacity)
+							podCopy.Name, podResource, v.providerNode.Status.Capacity)
 						if v.providerNode.Node == nil {
 							return
 						}
@@ -221,20 +230,22 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				old, ok1 := oldObj.(*corev1.Pod)
 				new, ok2 := newObj.(*corev1.Pod)
+				oldCopy := old.DeepCopy()
+				newCopy := new.DeepCopy()
 				if !ok1 || !ok2 {
 					return
 				}
-				if !util.IsVirtualPod(new) {
+				if !util.IsVirtualPod(newCopy) {
 					// Pod created only by lower cluster
 					// we should change the node resource
 					if v.providerNode.Node == nil {
 						return
 					}
-					v.updateVKCapacityFromPod(old, new)
+					v.updateVKCapacityFromPod(oldCopy, newCopy)
 				}
-				if !reflect.DeepEqual(old.Status, new.Status) {
-					util.TrimObjectMeta(&new.ObjectMeta)
-					v.updatedPod <- new
+				if !reflect.DeepEqual(oldCopy.Status, newCopy.Status) {
+					util.TrimObjectMeta(&newCopy.ObjectMeta)
+					v.updatedPod <- newCopy
 				}
 			},
 		},
@@ -251,9 +262,12 @@ func (v *VirtualK8S) updateVKCapacityFromNode(old, new *corev1.Node) {
 	nodeCopy := v.providerNode.DeepCopy()
 	if old.Spec.Unschedulable && !new.Spec.Unschedulable || newStatus && !oldStatus {
 		v.providerNode.AddResource(toAdd)
+		v.providerNode.SubResource(v.getResourceFromPodsByNodeName(old.Name))
 	}
 	if !old.Spec.Unschedulable && new.Spec.Unschedulable || oldStatus && !newStatus {
 		v.providerNode.SubResource(toRemove)
+		v.providerNode.AddResource(v.getResourceFromPodsByNodeName(old.Name))
+
 	}
 	if !reflect.DeepEqual(old.Status.Allocatable, new.Status.Allocatable) ||
 		!reflect.DeepEqual(old.Status.Capacity, new.Status.Capacity) {
