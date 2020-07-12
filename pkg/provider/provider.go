@@ -56,6 +56,7 @@ type VirtualK8S struct {
 	enableServiceAccount bool
 	stopCh               <-chan struct{}
 	providerNode         *common.ProviderNode
+	configured           bool
 }
 
 // NewVirtualK8S reads a kubeconfig file and sets up a client to interact
@@ -156,32 +157,51 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 	nodeInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
 				nodeCopy := v.providerNode.DeepCopy()
-				toAdd := common.ConvertResource(obj.(*corev1.Node).Status.Capacity)
+				addNode := obj.(*corev1.Node).DeepCopy()
+				toAdd := common.ConvertResource(addNode.Status.Capacity)
 				if err := v.providerNode.AddResource(toAdd); err != nil {
 					return
 				}
-				if !reflect.DeepEqual(nodeCopy, v.providerNode) {
-					v.updatedNode <- v.providerNode.Node
+				// resource we did not add when ConfigureNode should sub
+				v.providerNode.SubResource(v.getResourceFromPodsByNodeName(addNode.Name))
+				copy := v.providerNode.DeepCopy()
+				if !reflect.DeepEqual(nodeCopy, copy) {
+					v.updatedNode <- copy
 				}
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
+				if !v.configured {
+					return
+				}
 				old, ok1 := oldObj.(*corev1.Node)
 				new, ok2 := newObj.(*corev1.Node)
+				oldCopy := old.DeepCopy()
+				newCopy := new.DeepCopy()
 				if !ok1 || !ok2 {
 					return
 				}
 				klog.V(5).Infof("Node %v updated", old.Name)
-				v.updateVKCapacityFromNode(old, new)
+				v.updateVKCapacityFromNode(oldCopy, newCopy)
 			},
 			DeleteFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
 				nodeCopy := v.providerNode.DeepCopy()
-				toRemove := common.ConvertResource(obj.(*corev1.Node).Status.Capacity)
+				deleteNode := obj.(*corev1.Node).DeepCopy()
+				toRemove := common.ConvertResource(deleteNode.Status.Capacity)
 				if err := v.providerNode.SubResource(toRemove); err != nil {
 					return
 				}
-				if !reflect.DeepEqual(nodeCopy, v.providerNode) {
-					v.updatedNode <- v.providerNode.Node
+				// resource we did not add when ConfigureNode should add
+				v.providerNode.AddResource(v.getResourceFromPodsByNodeName(deleteNode.Name))
+				copy := v.providerNode.DeepCopy()
+				if !reflect.DeepEqual(nodeCopy, copy) {
+					v.updatedNode <- copy
 				}
 			},
 		},
@@ -192,49 +212,59 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 	podInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
 				pod, ok := obj.(*corev1.Pod)
 				if !ok {
 					return
 				}
-				util.TrimObjectMeta(&pod.ObjectMeta)
-				if !util.IsVirtualPod(pod) {
+				podCopy := pod.DeepCopy()
+				util.TrimObjectMeta(&podCopy.ObjectMeta)
+				if !util.IsVirtualPod(podCopy) {
 					if v.providerNode.Node == nil {
 						return
 					}
 					// Pod created only by lower cluster
 					// we should change the node resource
-					if len(pod.Spec.NodeName) != 0 {
-						podResource := util.GetRequestFromPod(pod)
+					if len(podCopy.Spec.NodeName) != 0 {
+						podResource := util.GetRequestFromPod(podCopy)
 						podResource.Pods = resource.MustParse("1")
 						v.providerNode.SubResource(podResource)
 						klog.Infof("Lower cluster add pod %s, resource: %v, node: %v",
-							pod.Name, podResource, v.providerNode.Status.Capacity)
+							podCopy.Name, podResource, v.providerNode.Status.Capacity)
 						if v.providerNode.Node == nil {
 							return
 						}
-						v.updatedNode <- v.providerNode.Node
+						copy := v.providerNode.DeepCopy()
+						v.updatedNode <- copy
 					}
 					return
 				}
 				v.updatedPod <- pod
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
+				if !v.configured {
+					return
+				}
 				old, ok1 := oldObj.(*corev1.Pod)
 				new, ok2 := newObj.(*corev1.Pod)
+				oldCopy := old.DeepCopy()
+				newCopy := new.DeepCopy()
 				if !ok1 || !ok2 {
 					return
 				}
-				if !util.IsVirtualPod(new) {
+				if !util.IsVirtualPod(newCopy) {
 					// Pod created only by lower cluster
 					// we should change the node resource
 					if v.providerNode.Node == nil {
 						return
 					}
-					v.updateVKCapacityFromPod(old, new)
+					v.updateVKCapacityFromPod(oldCopy, newCopy)
 				}
-				if !reflect.DeepEqual(old.Status, new.Status) {
-					util.TrimObjectMeta(&new.ObjectMeta)
-					v.updatedPod <- new
+				if !reflect.DeepEqual(oldCopy.Status, newCopy.Status) {
+					util.TrimObjectMeta(&newCopy.ObjectMeta)
+					v.updatedPod <- newCopy
 				}
 			},
 		},
@@ -243,29 +273,36 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 
 func (v *VirtualK8S) updateVKCapacityFromNode(old, new *corev1.Node) {
 	oldStatus, newStatus := compareNodeStatusReady(old, new)
-	toRemove := common.ConvertResource(new.Status.Capacity)
+	if !oldStatus && !newStatus {
+		return
+	}
+	toRemove := common.ConvertResource(old.Status.Capacity)
 	toAdd := common.ConvertResource(new.Status.Capacity)
 	nodeCopy := v.providerNode.DeepCopy()
 	if old.Spec.Unschedulable && !new.Spec.Unschedulable || newStatus && !oldStatus {
 		v.providerNode.AddResource(toAdd)
+		v.providerNode.SubResource(v.getResourceFromPodsByNodeName(old.Name))
 	}
 	if !old.Spec.Unschedulable && new.Spec.Unschedulable || oldStatus && !newStatus {
+		v.providerNode.AddResource(v.getResourceFromPodsByNodeName(old.Name))
 		v.providerNode.SubResource(toRemove)
+
 	}
 	if !reflect.DeepEqual(old.Status.Allocatable, new.Status.Allocatable) ||
 		!reflect.DeepEqual(old.Status.Capacity, new.Status.Capacity) {
 		klog.Infof("Start to update node resource, old: %v, new %v", old.Status.Capacity,
 			new.Status.Capacity)
-		v.providerNode.SubResource(toRemove)
 		v.providerNode.AddResource(toAdd)
+		v.providerNode.SubResource(toRemove)
 		klog.Infof("Current node resource, resource: %v, allocatable %v", v.providerNode.Status.Capacity,
 			v.providerNode.Status.Allocatable)
 	}
 	if v.providerNode.Node == nil {
 		return
 	}
-	if !reflect.DeepEqual(nodeCopy, v.providerNode) {
-		v.updatedNode <- v.providerNode.Node
+	copy := v.providerNode.DeepCopy()
+	if !reflect.DeepEqual(nodeCopy, copy) {
+		v.updatedNode <- copy
 	}
 }
 
@@ -301,6 +338,7 @@ func (v *VirtualK8S) updateVKCapacityFromPod(old, new *corev1.Pod) {
 	if v.providerNode.Node == nil {
 		return
 	}
-	v.updatedNode <- v.providerNode.Node
+	copy := v.providerNode.DeepCopy()
+	v.updatedNode <- copy
 	return
 }

@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
 )
@@ -50,30 +51,8 @@ func (v *VirtualK8S) ConfigureNode(ctx context.Context, node *corev1.Node) {
 		nc := common.ConvertResource(n.Status.Capacity)
 		nodeResource.Add(nc)
 	}
-
-	pods, err := v.clientCache.podLister.List(labels.Everything())
-	if err != nil {
-		return
-	}
-
-	for _, pod := range pods {
-		if pod.Status.Phase == corev1.PodPending && pod.Spec.NodeName != "" ||
-			pod.Status.Phase == corev1.PodRunning {
-			nodeName := pod.Spec.NodeName
-			node, err := v.clientCache.nodeLister.Get(nodeName)
-			if err != nil {
-				klog.Infof("get node %v failed err: %v", nodeName, err)
-				continue
-			}
-			if node.Spec.Unschedulable || !checkNodeStatusReady(node) {
-				continue
-			}
-			res := util.GetRequestFromPod(pod)
-			res.Pods = resource.MustParse("1")
-			nodeResource.Sub(res)
-		}
-	}
-
+	podResource := v.getResourceFromPods()
+	nodeResource.Sub(podResource)
 	nodeResource.SetCapacityToNode(node)
 	node.Status.NodeInfo.KubeletVersion = v.version
 	node.Status.NodeInfo.OperatingSystem = "linux"
@@ -85,6 +64,7 @@ func (v *VirtualK8S) ConfigureNode(ctx context.Context, node *corev1.Node) {
 	node.Status.Conditions = nodeConditions()
 	node.Status.DaemonEndpoints = v.nodeDaemonEndpoints()
 	v.providerNode.Node = node
+	v.configured = true
 	return
 }
 
@@ -107,14 +87,14 @@ func (v *VirtualK8S) Ping(ctx context.Context) error {
 // the status.
 //
 // NotifyNodeStatus should not block callers.
-func (v *VirtualK8S) NotifyNodeStatus(ctx context.Context, cb func(*corev1.Node)) {
+func (v *VirtualK8S) NotifyNodeStatus(ctx context.Context, f func(*corev1.Node)) {
 	klog.Info("Called NotifyNodeStatus")
 	go func() {
 		for {
 			select {
 			case node := <-v.updatedNode:
 				klog.Infof("Enqueue updated node %v", node.Name)
-				cb(node)
+				f(node)
 			case <-v.stopCh:
 				return
 			case <-ctx.Done():
@@ -132,6 +112,57 @@ func (v *VirtualK8S) nodeDaemonEndpoints() corev1.NodeDaemonEndpoints {
 			Port: v.daemonPort,
 		},
 	}
+}
+
+// getResourceFromPods summary the resource already used by pods.
+func (v *VirtualK8S) getResourceFromPods() *common.Resource {
+	podResource := common.NewResource()
+	pods, err := v.clientCache.podLister.List(labels.Everything())
+	if err != nil {
+		return podResource
+	}
+	for _, pod := range pods {
+		if pod.Status.Phase == corev1.PodPending && pod.Spec.NodeName != "" ||
+			pod.Status.Phase == corev1.PodRunning {
+			nodeName := pod.Spec.NodeName
+			node, err := v.clientCache.nodeLister.Get(nodeName)
+			if err != nil {
+				klog.Infof("get node %v failed err: %v", nodeName, err)
+				continue
+			}
+			if node.Spec.Unschedulable || !checkNodeStatusReady(node) {
+				continue
+			}
+			res := util.GetRequestFromPod(pod)
+			res.Pods = resource.MustParse("1")
+			podResource.Add(res)
+		}
+	}
+	return podResource
+}
+
+// getResourceFromPodsByNodeName summary the resource already used by pods according to nodeName
+func (v *VirtualK8S) getResourceFromPodsByNodeName(nodeName string) *common.Resource {
+	podResource := common.NewResource()
+	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + nodeName)
+	pods, err := v.client.CoreV1().Pods(corev1.NamespaceAll).List(metav1.ListOptions{
+		FieldSelector: fieldSelector.String(),
+	})
+	if err != nil {
+		return podResource
+	}
+	for _, pod := range pods.Items {
+		if util.IsVirtualPod(&pod) {
+			continue
+		}
+		if pod.Status.Phase == corev1.PodPending ||
+			pod.Status.Phase == corev1.PodRunning {
+			res := util.GetRequestFromPod(&pod)
+			res.Pods = resource.MustParse("1")
+			podResource.Add(res)
+		}
+	}
+	return podResource
 }
 
 // nodeConditions creates a slice of node conditions representing a

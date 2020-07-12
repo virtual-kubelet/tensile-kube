@@ -365,7 +365,7 @@ func (ctrl *CommonController) syncSecret() {
 		return
 	}
 	util.UpdateSecret(old, secret)
-	_, err = ctrl.client.CoreV1().Secrets(secret.Namespace).Update(secret)
+	_, err = ctrl.client.CoreV1().Secrets(secret.Namespace).Update(old)
 	if err != nil {
 		klog.Errorf("Get secret from client cluster failed, error: %v", err)
 		return
@@ -396,7 +396,10 @@ func (ctrl *CommonController) shouldEnqueueUpdateConfigMap(old, new *v1.ConfigMa
 }
 
 func (ctrl *CommonController) shouldEnqueueUpdateSecret(old, new *v1.Secret) bool {
-	if !ctrl.shouldEnqueue(&new.ObjectMeta) {
+	if !ctrl.shouldEnqueueAddSecret(old) {
+		return false
+	}
+	if !ctrl.shouldEnqueueAddSecret(new) {
 		return false
 	}
 	if !reflect.DeepEqual(old.Data, new.Data) {
