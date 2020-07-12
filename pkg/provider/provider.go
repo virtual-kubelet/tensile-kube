@@ -168,8 +168,9 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 				}
 				// resource we did not add when ConfigureNode should sub
 				v.providerNode.SubResource(v.getResourceFromPodsByNodeName(addNode.Name))
-				if !reflect.DeepEqual(nodeCopy, v.providerNode) {
-					v.updatedNode <- v.providerNode.Node
+				copy := v.providerNode.DeepCopy()
+				if !reflect.DeepEqual(nodeCopy, copy) {
+					v.updatedNode <- copy
 				}
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
@@ -198,8 +199,9 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 				}
 				// resource we did not add when ConfigureNode should add
 				v.providerNode.AddResource(v.getResourceFromPodsByNodeName(deleteNode.Name))
-				if !reflect.DeepEqual(nodeCopy, v.providerNode) {
-					v.updatedNode <- v.providerNode.Node
+				copy := v.providerNode.DeepCopy()
+				if !reflect.DeepEqual(nodeCopy, copy) {
+					v.updatedNode <- copy
 				}
 			},
 		},
@@ -234,7 +236,8 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 						if v.providerNode.Node == nil {
 							return
 						}
-						v.updatedNode <- v.providerNode.Node
+						copy := v.providerNode.DeepCopy()
+						v.updatedNode <- copy
 					}
 					return
 				}
@@ -281,24 +284,25 @@ func (v *VirtualK8S) updateVKCapacityFromNode(old, new *corev1.Node) {
 		v.providerNode.SubResource(v.getResourceFromPodsByNodeName(old.Name))
 	}
 	if !old.Spec.Unschedulable && new.Spec.Unschedulable || oldStatus && !newStatus {
-		v.providerNode.SubResource(toRemove)
 		v.providerNode.AddResource(v.getResourceFromPodsByNodeName(old.Name))
+		v.providerNode.SubResource(toRemove)
 
 	}
 	if !reflect.DeepEqual(old.Status.Allocatable, new.Status.Allocatable) ||
 		!reflect.DeepEqual(old.Status.Capacity, new.Status.Capacity) {
 		klog.Infof("Start to update node resource, old: %v, new %v", old.Status.Capacity,
 			new.Status.Capacity)
-		v.providerNode.SubResource(toRemove)
 		v.providerNode.AddResource(toAdd)
+		v.providerNode.SubResource(toRemove)
 		klog.Infof("Current node resource, resource: %v, allocatable %v", v.providerNode.Status.Capacity,
 			v.providerNode.Status.Allocatable)
 	}
 	if v.providerNode.Node == nil {
 		return
 	}
-	if !reflect.DeepEqual(nodeCopy, v.providerNode) {
-		v.updatedNode <- v.providerNode.Node
+	copy := v.providerNode.DeepCopy()
+	if !reflect.DeepEqual(nodeCopy, copy) {
+		v.updatedNode <- copy
 	}
 }
 
@@ -334,6 +338,7 @@ func (v *VirtualK8S) updateVKCapacityFromPod(old, new *corev1.Pod) {
 	if v.providerNode.Node == nil {
 		return
 	}
-	v.updatedNode <- v.providerNode.Node
+	copy := v.providerNode.DeepCopy()
+	v.updatedNode <- copy
 	return
 }

@@ -56,3 +56,11 @@ func (n *ProviderNode) SubResource(resource *Resource) error {
 	vkResource.SetCapacityToNode(n.Node)
 	return nil
 }
+
+// DeepCopy deepcopy node with lock, to avoid concurrent read-write
+func (n *ProviderNode) DeepCopy() *corev1.Node {
+	n.Lock()
+	node := n.Node.DeepCopy()
+	n.Unlock()
+	return node
+}

@@ -87,14 +87,14 @@ func (v *VirtualK8S) Ping(ctx context.Context) error {
 // the status.
 //
 // NotifyNodeStatus should not block callers.
-func (v *VirtualK8S) NotifyNodeStatus(ctx context.Context, cb func(*corev1.Node)) {
+func (v *VirtualK8S) NotifyNodeStatus(ctx context.Context, f func(*corev1.Node)) {
 	klog.Info("Called NotifyNodeStatus")
 	go func() {
 		for {
 			select {
 			case node := <-v.updatedNode:
 				klog.Infof("Enqueue updated node %v", node.Name)
-				cb(node)
+				f(node)
 			case <-v.stopCh:
 				return
 			case <-ctx.Done():

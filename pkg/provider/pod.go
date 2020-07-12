@@ -313,7 +313,7 @@ func (v *VirtualK8S) RunInContainer(ctx context.Context, namespace string, podNa
 // this function is called.
 //
 // NotifyPods will not block callers.
-func (v *VirtualK8S) NotifyPods(ctx context.Context, cb func(*corev1.Pod)) {
+func (v *VirtualK8S) NotifyPods(ctx context.Context, f func(*corev1.Pod)) {
 	klog.Info("Called NotifyPods")
 	go func() {
 		// to make sure pods have been add to known pods
@@ -324,7 +324,7 @@ func (v *VirtualK8S) NotifyPods(ctx context.Context, cb func(*corev1.Pod)) {
 				klog.V(4).Infof("Enqueue updated pod %v", pod.Name)
 				// need trim pod, e.g. UID
 				util.RecoverLabels(pod.Labels, pod.Annotations)
-				cb(pod)
+				f(pod)
 			case <-v.stopCh:
 				return
 			case <-ctx.Done():
