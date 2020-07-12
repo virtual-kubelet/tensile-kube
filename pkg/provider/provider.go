@@ -56,6 +56,7 @@ type VirtualK8S struct {
 	enableServiceAccount bool
 	stopCh               <-chan struct{}
 	providerNode         *common.ProviderNode
+	configured           bool
 }
 
 // NewVirtualK8S reads a kubeconfig file and sets up a client to interact
@@ -156,6 +157,9 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 	nodeInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
 				nodeCopy := v.providerNode.DeepCopy()
 				addNode := obj.(*corev1.Node).DeepCopy()
 				toAdd := common.ConvertResource(addNode.Status.Capacity)
@@ -169,6 +173,9 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 				}
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
+				if !v.configured {
+					return
+				}
 				old, ok1 := oldObj.(*corev1.Node)
 				new, ok2 := newObj.(*corev1.Node)
 				oldCopy := old.DeepCopy()
@@ -180,6 +187,9 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 				v.updateVKCapacityFromNode(oldCopy, newCopy)
 			},
 			DeleteFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
 				nodeCopy := v.providerNode.DeepCopy()
 				deleteNode := obj.(*corev1.Node).DeepCopy()
 				toRemove := common.ConvertResource(deleteNode.Status.Capacity)
@@ -200,6 +210,9 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 	podInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
 				pod, ok := obj.(*corev1.Pod)
 				if !ok {
 					return
@@ -228,6 +241,9 @@ func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
 				v.updatedPod <- pod
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
+				if !v.configured {
+					return
+				}
 				old, ok1 := oldObj.(*corev1.Pod)
 				new, ok2 := newObj.(*corev1.Pod)
 				oldCopy := old.DeepCopy()

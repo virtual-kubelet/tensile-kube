@@ -64,6 +64,7 @@ func (v *VirtualK8S) ConfigureNode(ctx context.Context, node *corev1.Node) {
 	node.Status.Conditions = nodeConditions()
 	node.Status.DaemonEndpoints = v.nodeDaemonEndpoints()
 	v.providerNode.Node = node
+	v.configured = true
 	return
 }
 
