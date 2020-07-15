@@ -40,6 +40,12 @@ nodeAffinity injected.
 
 We can choose one of the multi-scheduler and descheduler in the upper cluster or both.
 
+**Large cluster is not recommended to use multi-scheduler, e.g. sum of nodes in sub cluster is more than
+ 10000, descheduler would cost less.**
+ 
+**Multi-scheduler would be better when there are fewer nodes in a cluster, e.g. we have 10 clusters but each cluster
+ only has 100 nodes.**
+
 - webhook
 
 Webhook are designed based on K8s mutation webhook. It helps convert some fields that can affect scheduling pods in upper cluster, e.g. `nodeSelector`, `nodeAffinity` and `tolerations`. This field would be converted into the
