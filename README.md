@@ -28,8 +28,8 @@ also be created in the cluster.
 - multi-scheduler
 
 The scheduler is implemented based on [K8s scheduling framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/). It would watch all of the lower 
-clusters's capacity and call `filter` when scheduling pods, it the number of available nodes are more 
-than or equal 1, the pod can be scheduler. As you see, this may cost more resources. So we add another 
+clusters's capacity and call `filter` while scheduling pods. If the number of available nodes is greator 
+than or equal to 1, the pods can be scheduler. As you see, this may cost more resources, so we add another 
 implementation(descheduler).
 
 - descheduler
@@ -49,7 +49,7 @@ We can choose one of the multi-scheduler and descheduler in the upper cluster or
 - webhook
 
 Webhook are designed based on K8s mutation webhook. It helps convert some fields that can affect scheduling pods in upper cluster, e.g. `nodeSelector`, `nodeAffinity` and `tolerations`. This field would be converted into the
- annotation as follow:
+ annotation as follows:
  
 ```build
     clusterSelector: '{"tolerations":[{"key":"node.kubernetes.io/not-ready","operator":"Exists","effect":"NoExecute"},{"key":"node.kubernetes.io/unreachable","operator":"Exists","effect":"NoExecute"},{"key":"test","operator":"Exists","effect":"NoExecute"},{"key":"test1","operator":"Exists","effect":"NoExecute"},{"key":"test2","operator":"Exists","effect":"NoExecute"},{"key":"test3","operator":"Exists","effect":"NoExecute"}]}'
@@ -59,7 +59,7 @@ This fields we would be added back when the pods created in the lower cluster.
 
 ## Restrictions
 
-- If you want to use service, must keep inter-pods communication normal. Pod A in cluster B can be accessed by pod B in cluster B through ip. The service `kubernetes` 
+- If you want to use service, must keep inter-pods communication normal. Pod A in cluster A can be accessed by pod B in cluster B through ip. The service `kubernetes` 
 in `default` namespaces and other services in `kube-system` would be synced to lower clusters.
 
 - multi-scheduler developed in the repo may cost more resource because it would sync all objects that a scheduler
