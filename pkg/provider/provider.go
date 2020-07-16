@@ -148,8 +148,8 @@ func (v *VirtualK8S) GetMaster() kubernetes.Interface {
 	return v.master
 }
 
-// GetNameSpaceList returns the namespace cache
-func (v *VirtualK8S) GetNameSpaceList() v1.NamespaceLister {
+// GetNameSpaceLister returns the namespace cache
+func (v *VirtualK8S) GetNameSpaceLister() v1.NamespaceLister {
 	return v.clientCache.nsLister
 }
 

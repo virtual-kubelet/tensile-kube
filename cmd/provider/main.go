@@ -89,7 +89,7 @@ func main() {
 			provider, err := k8sprovider.NewVirtualK8S(cfg, &cc, ignoreLabels, enableServiceAccount, o)
 			if err == nil {
 				go RunController(ctx, provider.GetMaster(),
-					provider.GetClient(), provider.GetNameSpaceList(), cfg.NodeName, numberOfWorkers)
+					provider.GetClient(), provider.GetNameSpaceLister(), cfg.NodeName, numberOfWorkers)
 			}
 			return provider, err
 		}),
@@ -135,10 +135,10 @@ func RunController(ctx context.Context, master,
 		}
 		switch c {
 		case "PVControllers":
-			pvCtrl := buildPVControllers(master, client, masterInformer, clientInformer, hostIP)
+			pvCtrl := buildPVController(master, client, masterInformer, clientInformer, hostIP)
 			runningControllers = append(runningControllers, pvCtrl)
 		case "ServiceControllers":
-			serviceCtrl := buildServiceControllers(master, client, masterInformer, clientInformer, nsLister)
+			serviceCtrl := buildServiceController(master, client, masterInformer, clientInformer, nsLister)
 			runningControllers = append(runningControllers, serviceCtrl)
 
 		}
@@ -152,7 +152,7 @@ func RunController(ctx context.Context, master,
 	return nil
 }
 
-func buildServiceControllers(master, client kubernetes.Interface, masterInformer,
+func buildServiceController(master, client kubernetes.Interface, masterInformer,
 	clientInformer kubeinformers.SharedInformerFactory,
 	nsLister corelisters.NamespaceLister) controllers.Controller {
 	// master
@@ -168,7 +168,7 @@ func buildServiceControllers(master, client kubernetes.Interface, masterInformer
 		clientServiceInformer, clientEndpointsInformer, nsLister, serviceRateLimiter, endpointsRateLimiter)
 }
 
-func buildPVControllers(master, client kubernetes.Interface, masterInformer,
+func buildPVController(master, client kubernetes.Interface, masterInformer,
 	clientInformer kubeinformers.SharedInformerFactory, hostIP string) controllers.Controller {
 
 	pvcInformer := masterInformer.Core().V1().PersistentVolumeClaims()
@@ -204,7 +204,7 @@ func buildCommonControllers(client kubernetes.Interface, masterInformer,
 func rateLimiter() workqueue.RateLimiter {
 	return workqueue.NewMaxOfRateLimiter(
 		workqueue.NewItemExponentialFailureRateLimiter(5*time.Millisecond, 10*time.Second),
-		// 10 qps, 100 bucket size.  This is only for retry speed and its only the overall factor (not per item)
+		// 100 qps, 1000 bucket size.  This is only for retry speed and its only the overall factor (not per item)
 		&workqueue.BucketRateLimiter{Limiter: rate.NewLimiter(rate.Limit(100), 1000)},
 	)
 }
