@@ -204,9 +204,9 @@ func (ctrl *ServiceController) syncService() {
 	}
 	klog.V(4).Infof("Started service processing %q", serviceName)
 
-	if err = checkNamespaceExist(namespace, ctrl.client, ctrl.nsLister); err != nil {
+	if err = ensureNamespace(namespace, ctrl.client, ctrl.nsLister); err != nil {
 		ctrl.serviceQueue.AddRateLimited(key)
-		klog.Errorf("Create role from client cluster failed, error: %v", err)
+		klog.Errorf("Create role in client cluster failed, error: %v", err)
 		return
 	}
 	defer func() {
@@ -233,7 +233,7 @@ func (ctrl *ServiceController) syncService() {
 			if err = ctrl.client.CoreV1().Services(namespace).Delete(serviceName,
 				&metav1.DeleteOptions{}); err != nil {
 				if !apierrs.IsNotFound(err) {
-					klog.Errorf("Delete service from client cluster failed, error: %v", err)
+					klog.Errorf("Delete service in client cluster failed, error: %v", err)
 					return
 				}
 				err = nil
@@ -247,7 +247,7 @@ func (ctrl *ServiceController) syncService() {
 		if err = ctrl.client.CoreV1().Services(namespace).Delete(serviceName,
 			&metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
-				klog.Errorf("Delete service from client cluster failed, error: %v", err)
+				klog.Errorf("Delete service in client cluster failed, error: %v", err)
 				return
 			}
 			err = nil
@@ -275,9 +275,9 @@ func (ctrl *ServiceController) syncEndpoints() {
 	}
 	klog.V(4).Infof("Started endpoints processing %q/%q", namespace, endpointsName)
 
-	if err = checkNamespaceExist(namespace, ctrl.client, ctrl.nsLister); err != nil {
+	if err = ensureNamespace(namespace, ctrl.client, ctrl.nsLister); err != nil {
 		ctrl.endpointsQueue.AddRateLimited(key)
-		klog.Errorf("Create role from client cluster failed, error: %v", err)
+		klog.Errorf("Create role in client cluster failed, error: %v", err)
 		return
 	}
 
@@ -305,7 +305,7 @@ func (ctrl *ServiceController) syncEndpoints() {
 			if err = ctrl.client.CoreV1().Endpoints(namespace).Delete(endpointsName,
 				&metav1.DeleteOptions{}); err != nil {
 				if !apierrs.IsNotFound(err) {
-					klog.Errorf("Delete endpoint from client cluster failed, error: %v", err)
+					klog.Errorf("Delete endpoint in client cluster failed, error: %v", err)
 					return
 				}
 				err = nil
@@ -320,7 +320,7 @@ func (ctrl *ServiceController) syncEndpoints() {
 		if err = ctrl.client.CoreV1().Endpoints(namespace).Delete(endpointsName,
 			&metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
-				klog.Errorf("Delete service from client cluster failed, error: %v", err)
+				klog.Errorf("Delete service in client cluster failed, error: %v", err)
 				return
 			}
 			err = nil
@@ -357,9 +357,10 @@ func (ctrl *ServiceController) syncServiceHandler(service *v1.Service) {
 		}
 		serviceInSub, err = ctrl.client.CoreV1().Services(service.Namespace).Create(serviceInSub)
 		if err != nil || serviceInSub == nil {
-			klog.Errorf("Create service %v in client cluster failed, error: %v", key, err)
+			err = fmt.Errorf("Create service %v in client cluster failed, error: %v", key, err)
 			return
 		}
+		err = nil
 		klog.Infof("Create service %v in client cluster success", key)
 		return
 	}
@@ -374,7 +375,6 @@ func (ctrl *ServiceController) syncServiceHandler(service *v1.Service) {
 	if _, err = ctrl.patchService(serviceInSub, serviceCopy); err != nil {
 		return
 	}
-	ctrl.serviceQueue.Forget(key)
 	klog.V(4).Infof("Handler service: finished processing %q", service.Name)
 }
 func (ctrl *ServiceController) syncEndpointsHandler(endpoints *v1.Endpoints) {
@@ -401,9 +401,10 @@ func (ctrl *ServiceController) syncEndpointsHandler(endpoints *v1.Endpoints) {
 		filterCommon(&endpointsInSub.ObjectMeta)
 		endpointsInSub, err = ctrl.client.CoreV1().Endpoints(endpoints.Namespace).Create(endpointsInSub)
 		if err != nil || endpointsInSub == nil {
-			klog.Errorf("Create endpoints in client cluster failed, error: %v", err)
+			err = fmt.Errorf("Create endpoints in client cluster failed, error: %v", err)
 			return
 		}
+		err = nil
 		klog.Infof("Create endpoints %v in client cluster success", key)
 		return
 	}
@@ -415,7 +416,6 @@ func (ctrl *ServiceController) syncEndpointsHandler(endpoints *v1.Endpoints) {
 	if _, err = ctrl.patchEndpoints(endpointsInSub, endpointsCopy); err != nil {
 		return
 	}
-	ctrl.endpointsQueue.Forget(key)
 	klog.V(4).Infof("Handler endpoints: finished processing %q", endpointsInSub.Name)
 }
 func (ctrl *ServiceController) patchService(service, clone *v1.Service) (*v1.Service, error) {

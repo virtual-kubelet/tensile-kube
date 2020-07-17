@@ -24,12 +24,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	"k8s.io/klog"
 
 	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 )
 
-func checkNamespaceExist(ns string, client kubernetes.Interface, nsLister corelisters.NamespaceLister) error {
+func ensureNamespace(ns string, client kubernetes.Interface, nsLister corelisters.NamespaceLister) error {
 	_, err := nsLister.Get(ns)
 	if err == nil {
 		return nil
@@ -41,7 +40,6 @@ func checkNamespaceExist(ns string, client kubernetes.Interface, nsLister coreli
 		ObjectMeta: metav1.ObjectMeta{Name: ns},
 	}); err != nil {
 		if !apierrs.IsAlreadyExists(err) {
-			klog.Errorf("Create role from client cluster failed, error: %v", err)
 			return err
 		}
 		return nil
