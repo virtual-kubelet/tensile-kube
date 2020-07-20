@@ -37,12 +37,13 @@ func main() {
 		return
 	}
 
-	klog.Infof("starting webhook server.")
+	options.SetDefaults()
 	if err := options.Validate(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
+	klog.Infof("starting webhook server.")
 	if err := app.Run(options); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

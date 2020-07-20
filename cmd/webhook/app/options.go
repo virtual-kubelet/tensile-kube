@@ -27,6 +27,8 @@ import (
 var (
 	// Version is used for support printing version
 	Version = "unknown"
+	// DefaultPort is the default port that the webhook server serves
+	DefaultPort = 8080
 )
 
 // ServerRunOptions defines the options of webhook server
@@ -63,17 +65,25 @@ func NewServerRunOptions() *ServerRunOptions {
 
 func (s *ServerRunOptions) addFlags() {
 	pflag.StringVar(&s.Address, "address", "0.0.0.0", "The address of scheduler manager.")
-	pflag.IntVar(&s.Port, "port", 8080, "The port of scheduler manager.")
-	pflag.StringVar(&s.TLSCert, "tlscert", "", "Path to TLS certificate file")
-	pflag.StringVar(&s.TLSKey, "tlskey", "", "Path to TLS key file")
-	pflag.StringVar(&s.TLSCA, "CA", "", "Path to certificate file")
+	pflag.IntVar(&s.Port, "port", 8080, "The port of webhook server.")
+	pflag.StringVar(&s.TLSCert, "tlscert", "", "Path to TLS certificate file.")
+	pflag.StringVar(&s.TLSKey, "tlskey", "", "Path to TLS key file.")
+	pflag.StringVar(&s.TLSCA, "CA", "", "Path to certificate file.")
 	pflag.StringVar(&s.Kubeconfig, "kubeconfig", "", "Absolute path to the kubeconfig file.")
-	pflag.StringVar(&s.MasterURL, "master", "", "Master url.")
+	pflag.StringVar(&s.MasterURL, "master", "", "(Deprecated: switch to `--kubeconfig`) The address of the Kubernetes API server. Overrides any value in kubeconfig. "+
+		"Only required if out-of-cluster.")
 	pflag.BoolVar(&s.InCluster, "incluster", false, "If this extender running in the cluster.")
 	pflag.StringVar(&s.IgnoreSelectorKeys, "ignore-selector-keys", util.ClusterID,
 		"IgnoreSelectorKeys represents those nodeSelector keys should not be converted, "+
-			"it would affect the scheduling in then upper cluster, multi values should split by comma(,)")
+			"it would affect the scheduling in then upper cluster, multi values should split by comma(,).")
 	pflag.BoolVar(&s.ShowVersion, "version", false, "Show version.")
+}
+
+// SetDefaults does defaulting for the Server
+func (s *ServerRunOptions) SetDefaults() {
+	if s.Port <= 0 {
+		s.Port = DefaultPort
+	}
 }
 
 // Validate is used for validate address
