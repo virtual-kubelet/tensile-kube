@@ -83,8 +83,9 @@ func NewWebhookServer(pvcLister v1.PersistentVolumeClaimLister, ignoreKeys []str
 func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.AdmissionResponse {
 	req := ar.Request
 	var (
-		err error
-		pod corev1.Pod
+		err    error
+		pod    corev1.Pod
+		result metav1.Status
 	)
 	switch req.Kind.Kind {
 	case "Pod":
@@ -129,11 +130,13 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 
 	clone := pod.DeepCopy()
 	whsvr.trySetNodeName(clone, req.Namespace)
-	inject(clone, whsvr.ignoreSelectorKeys)
+	if err := inject(clone, whsvr.ignoreSelectorKeys); err != nil {
+		klog.Errorf("Inject pod obj failed: %v", err)
+		// just contine
+	}
 	klog.V(6).Infof("Final obj %+v", clone)
 	patch, err := util.CreateJSONPatch(pod, clone)
 	klog.Infof("Final patch %+v", string(patch))
-	var result metav1.Status
 	if err != nil {
 		result.Code = 403
 		result.Message = err.Error()
@@ -228,13 +231,13 @@ func (whsvr *webhookServer) trySetNodeName(pod *corev1.Pod, ns string) {
 	return
 }
 
-func inject(pod *corev1.Pod, ignoreKeys []string) {
+func inject(pod *corev1.Pod, ignoreKeys []string) error {
 	nodeSelector := make(map[string]string)
 	var affinity *corev1.Affinity
 	if len(pod.Spec.NodeSelector) == 0 &&
 		pod.Spec.Affinity == nil &&
 		pod.Spec.Tolerations == nil {
-		return
+		return nil
 	}
 
 	if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
@@ -242,7 +245,7 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 	}
 
 	if pod.Spec.NodeSelector != nil {
-		nodeSelector = injectNodeSelector(pod.Spec.NodeSelector, ignoreKeys)
+		nodeSelector = reconcileNodeSelector(pod.Spec.NodeSelector, ignoreKeys)
 	}
 
 	cns := util.ClustersNodeSelection{
@@ -252,10 +255,10 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 	}
 	cnsByte, err := json.Marshal(cns)
 	if err != nil {
-		return
+		return err
 	}
 	if len(cnsByte) == 0 {
-		return
+		return nil
 	}
 
 	if pod.Annotations == nil {
@@ -264,6 +267,7 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 	pod.Annotations[util.SelectorKey] = string(cnsByte)
 
 	pod.Spec.Tolerations = getPodTolerations(pod)
+	return nil
 }
 
 func getPodTolerations(pod *corev1.Pod) []corev1.Toleration {
@@ -292,8 +296,8 @@ func getPodTolerations(pod *corev1.Pod) []corev1.Toleration {
 	return tolerations
 }
 
-// injectNodeSelector reserve  ignoreLabels in nodeSelector, others would be removed
-func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) map[string]string {
+// reconcileNodeSelector remove labels which in ignoreLabels from nodeSelector
+func reconcileNodeSelector(nodeSelector map[string]string, ignoreLabels []string) map[string]string {
 	nodeSelectorBackup := make(map[string]string)
 	finalNodeSelector := make(map[string]string)
 	labelMap := make(map[string]string)
@@ -304,7 +308,7 @@ func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) m
 		nodeSelectorBackup[k] = v
 	}
 	for k, v := range nodeSelector {
-		// not found in label, delete
+		// delete if found in ignoreLabels
 		if labelMap[k] != "" {
 			continue
 		}
