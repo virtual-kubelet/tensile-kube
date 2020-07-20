@@ -120,6 +120,11 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 				Allowed: true,
 			}
 		}
+		if !util.IsVirtualPod(&pod) {
+			return &v1beta1.AdmissionResponse{
+				Allowed: true,
+			}
+		}
 	}
 
 	clone := pod.DeepCopy()
