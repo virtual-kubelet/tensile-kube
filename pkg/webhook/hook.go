@@ -130,9 +130,9 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 
 	clone := pod.DeepCopy()
 	whsvr.trySetNodeName(clone, req.Namespace)
-	if err := inject(clone, whsvr.ignoreSelectorKeys); err != nil {
-		klog.Errorf("Inject pod obj failed: %v", err)
-		// just contine
+	if err = inject(clone, whsvr.ignoreSelectorKeys); err != nil {
+		klog.Warningf("Inject pod obj failed: %v", err)
+		// just continue
 	}
 	klog.V(6).Infof("Final obj %+v", clone)
 	patch, err := util.CreateJSONPatch(pod, clone)
