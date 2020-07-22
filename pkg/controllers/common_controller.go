@@ -215,6 +215,7 @@ func (ctrl *CommonController) secretDeleted(obj interface{}) {
 			return
 		}
 		ctrl.secretQueue.Add(key)
+
 		klog.V(6).Infof("Secret delete, enqueue secret: %v", key)
 	} else {
 		klog.V(6).Infof("Ignoring secret %q change", secret.Name)
@@ -320,13 +321,13 @@ func (ctrl *CommonController) syncSecret() {
 	}()
 
 	var secret *v1.Secret
-	deleteConfigMapInClient := false
+	deleteSecretInClient := false
 	secret, err = ctrl.masterSecretLister.Secrets(namespace).Get(secretName)
 	if err != nil {
 		if !apierrs.IsNotFound(err) {
 			return
 		}
-		_, err = ctrl.masterSecretLister.Secrets(namespace).Get(secretName)
+		_, err = ctrl.clientSecretLister.Secrets(namespace).Get(secretName)
 		if err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Get secret from master cluster failed, error: %v", err)
@@ -336,11 +337,11 @@ func (ctrl *CommonController) syncSecret() {
 			klog.V(3).Infof("Secret %q deleted", secretName)
 			return
 		}
-		deleteConfigMapInClient = true
+		deleteSecretInClient = true
 
 	}
 
-	if deleteConfigMapInClient || secret.DeletionTimestamp != nil {
+	if deleteSecretInClient || secret.DeletionTimestamp != nil {
 		if err = ctrl.client.CoreV1().Secrets(namespace).Delete(secretName,
 			&metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
@@ -373,7 +374,7 @@ func (ctrl *CommonController) syncSecret() {
 }
 
 func (ctrl *CommonController) shouldEnqueue(obj *metav1.ObjectMeta) bool {
-	if obj.Namespace == metav1.NamespaceSystem {
+	if obj.Namespace == metav1.NamespaceSystem || !IsObjectGlobal(obj) {
 		return false
 	}
 	return true
