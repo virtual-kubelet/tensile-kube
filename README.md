@@ -48,14 +48,21 @@ We can choose one of the multi-scheduler and descheduler in the upper cluster or
 
 - webhook
 
-Webhook are designed based on K8s mutation webhook. It helps convert some fields that can affect scheduling pods in upper cluster, e.g. `nodeSelector`, `nodeAffinity` and `tolerations`. This field would be converted into the
- annotation as follows:
+Webhook are designed based on K8s mutation webhook. It helps convert some fields that can affect scheduling pods(not in kube-system) in the upper cluster, e.g. `nodeSelector`, `nodeAffinity` and `tolerations`. But only the pods have a label `virtual-pod:true` would be converted. These fields would be converted into the annotation as follows:
  
 ```build
     clusterSelector: '{"tolerations":[{"key":"node.kubernetes.io/not-ready","operator":"Exists","effect":"NoExecute"},{"key":"node.kubernetes.io/unreachable","operator":"Exists","effect":"NoExecute"},{"key":"test","operator":"Exists","effect":"NoExecute"},{"key":"test1","operator":"Exists","effect":"NoExecute"},{"key":"test2","operator":"Exists","effect":"NoExecute"},{"key":"test3","operator":"Exists","effect":"NoExecute"}]}'
 ``` 
 
 This fields we would be added back when the pods created in the lower cluster.
+
+Pods are strongly recommended to run in the lower clusters and add a label `virtual-pod:true`, except for those pods must be deployed in `kube-system` in the upper cluster.
+ 
+**For K8s< 1.16, pods without the label would not be converted. But queries would still send to the webhook.**
+
+**For K8s>=1.16, we can use label selector to enable the webhook for some specified pods.**
+ 
+**Overall, the initial idea is that we only run pods in lower clusters.**
 
 ## Restrictions
 
