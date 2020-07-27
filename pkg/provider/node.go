@@ -19,6 +19,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/virtual-kubelet/tensile-kube/pkg/common"
 	"github.com/virtual-kubelet/tensile-kube/pkg/util"
@@ -60,7 +61,7 @@ func (v *VirtualK8S) ConfigureNode(ctx context.Context, node *corev1.Node) {
 	node.ObjectMeta.Labels[corev1.LabelArchStable] = "amd64"
 	node.ObjectMeta.Labels[corev1.LabelOSStable] = "linux"
 	node.ObjectMeta.Labels[util.LabelOSBeta] = "linux"
-	node.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: v.nodeName}}
+	node.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: os.Getenv("VKUBELET_POD_IP")}}
 	node.Status.Conditions = nodeConditions()
 	node.Status.DaemonEndpoints = v.nodeDaemonEndpoints()
 	v.providerNode.Node = node
