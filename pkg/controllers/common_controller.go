@@ -290,6 +290,9 @@ func (ctrl *CommonController) syncConfigMap() {
 		return
 	}
 	util.UpdateConfigMap(old, configMap)
+	if IsObjectGlobal(&old.ObjectMeta) {
+		return
+	}
 	_, err = ctrl.client.CoreV1().ConfigMaps(configMap.Namespace).Update(old)
 	if err != nil {
 		klog.Errorf("Get configMap from client cluster failed, error: %v", err)
@@ -366,6 +369,9 @@ func (ctrl *CommonController) syncSecret() {
 		return
 	}
 	util.UpdateSecret(old, secret)
+	if IsObjectGlobal(&old.ObjectMeta) {
+		return
+	}
 	_, err = ctrl.client.CoreV1().Secrets(secret.Namespace).Update(old)
 	if err != nil {
 		klog.Errorf("Get secret from client cluster failed, error: %v", err)
@@ -374,7 +380,7 @@ func (ctrl *CommonController) syncSecret() {
 }
 
 func (ctrl *CommonController) shouldEnqueue(obj *metav1.ObjectMeta) bool {
-	if obj.Namespace == metav1.NamespaceSystem || !IsObjectGlobal(obj) {
+	if obj.Namespace == metav1.NamespaceSystem {
 		return false
 	}
 	return true
