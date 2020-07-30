@@ -76,6 +76,7 @@ func TestCommonController_RunUpdateConfigMap(t *testing.T) {
 	for _, c := range cases {
 		t.Logf("Running case :%v", c.name)
 		success := false
+		b.client.CoreV1().ConfigMaps(c.configMap.Namespace).Update(newConfigMap())
 		if _, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Update(c.configMap); err != nil {
 			t.Fatal(err)
 		}
@@ -93,7 +94,7 @@ func TestCommonController_RunUpdateConfigMap(t *testing.T) {
 			return false, nil
 		})
 		if !success {
-			t.Logf("configMap update failed")
+			t.Fatal("configMap update failed")
 		}
 	}
 
@@ -134,6 +135,7 @@ func TestCommonController_RunUpdateSecret(t *testing.T) {
 	for _, c := range cases {
 		t.Logf("Running case :%v", c.name)
 		success := false
+		b.client.CoreV1().Secrets(c.secret.Namespace).Update(newSecret())
 		if _, err = b.master.CoreV1().Secrets(c.secret.Namespace).Update(c.secret); err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +153,7 @@ func TestCommonController_RunUpdateSecret(t *testing.T) {
 			return false, nil
 		})
 		if !success {
-			t.Logf("secret update failed")
+			t.Fatal("secret update failed")
 		}
 	}
 
