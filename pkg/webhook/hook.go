@@ -326,6 +326,9 @@ func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Af
 		return nil
 	}
 	required := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+	if required == nil {
+		return nil
+	}
 	requiredCopy := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.DeepCopy()
 	var nodeSelectorTerm []corev1.NodeSelectorTerm
 	for termIdx, term := range requiredCopy.NodeSelectorTerms {
@@ -361,13 +364,24 @@ func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Af
 		if len(mfs) != 0 || len(mes) != 0 {
 			nodeSelectorTerm = append(nodeSelectorTerm, corev1.NodeSelectorTerm{MatchFields: mfs, MatchExpressions: mes})
 		}
+	}
 
+	filterdTerms := make([]corev1.NodeSelectorTerm, 0)
+	for _, term := range required.NodeSelectorTerms {
+		if len(term.MatchFields) == 0 && len(term.MatchExpressions) == 0 {
+			continue
+		}
+		filterdTerms = append(filterdTerms, term)
+	}
+	if len(filterdTerms) == 0 {
+		required = nil
+	} else {
+		required.NodeSelectorTerms = filterdTerms
 	}
 	affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = required
 	if len(nodeSelectorTerm) == 0 {
 		return nil
 	}
-
 	return &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: nodeSelectorTerm},
 	}}
