@@ -89,42 +89,50 @@ func TestTrimPod(t *testing.T) {
 	basePod2.Labels = map[string]string{"test": "test"}
 
 	cases := []struct {
+		name      string
 		pod       *corev1.Pod
 		desire    *corev1.Pod
 		trimLabel []string
 	}{
 		{
+			name:      "base test",
 			pod:       basePod,
 			desire:    desired,
 			trimLabel: nil,
 		},
 		{
+			name:      "base test with annotation clusterSelector",
 			pod:       basePod1,
 			desire:    desired1,
 			trimLabel: nil,
 		},
 		{
+			name:      "base test with label",
 			pod:       basePod2,
 			desire:    desired2,
 			trimLabel: []string{"test"},
 		},
 		{
+			name:      "base test toleration",
 			pod:       testbase.PodForTestWithOtherTolerations(),
 			desire:    desired,
 			trimLabel: nil,
 		},
 		{
+			name:      "base test node selector",
 			pod:       testbase.PodForTestWithNodeSelector(),
 			desire:    desired,
 			trimLabel: nil,
 		},
 		{
+			name:      "base affinity",
 			pod:       testbase.PodForTestWithAffinity(),
 			desire:    desired,
 			trimLabel: nil,
 		},
 	}
 	for _, d := range cases {
+		t.Log(d.name)
 		new := TrimPod(d.pod, d.trimLabel)
 		if new.String() != d.desire.String() {
 			t.Fatalf("Desired:\n %v\n, get:\n %v", d.desire, new)
