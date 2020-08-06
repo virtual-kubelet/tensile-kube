@@ -46,17 +46,7 @@ func TrimPod(pod *corev1.Pod, ignoreLabels []string) *corev1.Pod {
 	}
 	podCopy.Labels[VirtualPodLabel] = "true"
 	cns := ConvertAnnotations(pod.Annotations)
-	// remove selector
-	if cns != nil {
-		podCopy.Spec.NodeSelector = cns.NodeSelector
-		podCopy.Spec.Affinity = cns.Affinity
-		podCopy.Spec.Tolerations = cns.Tolerations
-	} else {
-		podCopy.Spec.NodeSelector = nil
-		podCopy.Spec.Affinity = nil
-		podCopy.Spec.Tolerations = nil
-	}
-
+	recoverSelectors(podCopy, cns)
 	podCopy.Spec.Containers = trimContainers(pod.Spec.Containers)
 	podCopy.Spec.InitContainers = trimContainers(pod.Spec.InitContainers)
 	podCopy.Spec.Volumes = vols
@@ -142,6 +132,46 @@ func RecoverLabels(labels map[string]string, annotations map[string]string) {
 	}
 	for k, v := range trippedLabelsMap {
 		labels[k] = v
+	}
+}
+
+// recoverSelectors recover some affinity, tolerations and nodeSelector from
+// ClusterSelector
+func recoverSelectors(pod *corev1.Pod, cns *ClustersNodeSelection) {
+	if cns != nil {
+		pod.Spec.NodeSelector = cns.NodeSelector
+		pod.Spec.Tolerations = cns.Tolerations
+		if pod.Spec.Affinity == nil {
+			pod.Spec.Affinity = cns.Affinity
+		} else {
+			if cns.Affinity != nil && cns.Affinity.NodeAffinity != nil {
+				if pod.Spec.Affinity.NodeAffinity != nil {
+					pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = cns.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
+				} else {
+					pod.Spec.Affinity.NodeAffinity = cns.Affinity.NodeAffinity
+				}
+			} else {
+				pod.Spec.Affinity.NodeAffinity = nil
+			}
+		}
+	} else {
+		pod.Spec.NodeSelector = nil
+		pod.Spec.Tolerations = nil
+		if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
+			pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = nil
+		}
+	}
+	if pod.Spec.Affinity != nil {
+		if pod.Spec.Affinity.NodeAffinity != nil {
+			if pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil &&
+				pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution == nil {
+				pod.Spec.Affinity.NodeAffinity = nil
+			}
+		}
+		if pod.Spec.Affinity.NodeAffinity == nil && pod.Spec.Affinity.PodAffinity == nil &&
+			pod.Spec.Affinity.PodAntiAffinity == nil {
+			pod.Spec.Affinity = nil
+		}
 	}
 }
 
