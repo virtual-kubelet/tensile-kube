@@ -38,13 +38,13 @@ func getSecrets(pod *corev1.Pod) []string {
 
 		case v.CephFS != nil:
 			klog.Infof("pod %s depends on secret %s", pod.Name, v.CephFS.SecretRef.Name)
-			secretNames = append(secretNames, v.Secret.SecretName)
+			secretNames = append(secretNames, v.CephFS.SecretRef.Name)
 		case v.Cinder != nil:
 			klog.Infof("pod %s depends on secret %s", pod.Name, v.Cinder.SecretRef.Name)
-			secretNames = append(secretNames, v.Secret.SecretName)
+			secretNames = append(secretNames, v.Cinder.SecretRef.Name)
 		case v.RBD != nil:
 			klog.Infof("pod %s depends on secret %s", pod.Name, v.RBD.SecretRef.Name)
-			secretNames = append(secretNames, v.Secret.SecretName)
+			secretNames = append(secretNames, v.RBD.SecretRef.Name)
 		}
 	}
 	secretFromEnv := map[string]string{}
