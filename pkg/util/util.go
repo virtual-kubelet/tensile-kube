@@ -23,11 +23,14 @@ import (
 
 // GetRequestFromContainer get resources required by container
 func GetRequestFromContainer(container *corev1.Container) *common.Resource {
-	cap := container.Resources.Limits
-	if cap == nil {
-		cap = container.Resources.Requests
+	resources := container.Resources.Requests
+	if resources == nil {
+		resources = container.Resources.Limits
+		if resources == nil {
+			resources = corev1.ResourceList{}
+		}
 	}
-	capacity := common.ConvertResource(cap)
+	capacity := common.ConvertResource(resources)
 	return capacity
 }
 
