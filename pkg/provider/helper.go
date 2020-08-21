@@ -47,26 +47,6 @@ func getSecrets(pod *corev1.Pod) []string {
 			secretNames = append(secretNames, v.RBD.SecretRef.Name)
 		}
 	}
-	secretFromEnv := map[string]string{}
-	for _, v := range pod.Spec.Containers {
-		for _, val := range v.EnvFrom {
-			if val.SecretRef != nil {
-				name := val.SecretRef.Name
-				secretFromEnv[name] = name
-			}
-		}
-	}
-	for _, v := range pod.Spec.InitContainers {
-		for _, val := range v.EnvFrom {
-			if val.SecretRef != nil {
-				name := val.SecretRef.Name
-				secretFromEnv[name] = name
-			}
-		}
-	}
-	for _, v := range secretFromEnv {
-		secretNames = append(secretNames, v)
-	}
 	if pod.Spec.ImagePullSecrets != nil {
 		for _, s := range pod.Spec.ImagePullSecrets {
 			secretNames = append(secretNames, s.Name)
@@ -84,26 +64,6 @@ func getConfigmaps(pod *corev1.Pod) []string {
 			continue
 		}
 		cmNames = append(cmNames, v.ConfigMap.Name)
-	}
-	cmFromeEnv := map[string]string{}
-	for _, v := range pod.Spec.InitContainers {
-		for _, val := range v.EnvFrom {
-			if val.ConfigMapRef != nil {
-				name := val.ConfigMapRef.Name
-				cmFromeEnv[name] = name
-			}
-		}
-	}
-	for _, v := range pod.Spec.Containers {
-		for _, val := range v.EnvFrom {
-			if val.ConfigMapRef != nil {
-				name := val.ConfigMapRef.Name
-				cmFromeEnv[name] = name
-			}
-		}
-	}
-	for _, v := range cmFromeEnv {
-		cmNames = append(cmNames, v)
 	}
 	klog.Infof("pod %s depends on configMap %s", pod.Name, cmNames)
 	return cmNames
