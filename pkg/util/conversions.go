@@ -92,7 +92,6 @@ func GetUpdatedPod(orig, update *corev1.Pod, ignoreLabels []string) {
 	}
 	for i := range orig.Spec.Containers {
 		orig.Spec.Containers[i].Image = update.Spec.Containers[i].Image
-
 	}
 	if update.Annotations == nil {
 		update.Annotations = make(map[string]string)

@@ -51,8 +51,10 @@ func (v *VirtualK8S) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	}
 	basicPod := util.TrimPod(pod, v.ignoreLabels)
 	klog.V(3).Infof("Creating pod %v/%+v", pod.Namespace, pod.Name)
-	if _, err := v.clientCache.nsLister.Get(pod.Namespace); err != nil && errors.IsNotFound(
-		err) {
+	if _, err := v.clientCache.nsLister.Get(pod.Namespace); err != nil {
+		if !errors.IsNotFound(err) {
+			return err
+		}
 		klog.Infof("Namespace %s does not exist for pod %s, creating it", pod.Namespace, pod.Name)
 		ns := &corev1.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
