@@ -14,7 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	kubeinformers "k8s.io/client-go/informers"
-	v12 "k8s.io/client-go/informers/core/v1"
+	informerv1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	v1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
@@ -153,7 +153,7 @@ func (v *VirtualK8S) GetNameSpaceLister() v1.NamespaceLister {
 	return v.clientCache.nsLister
 }
 
-func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
+func (v *VirtualK8S) buildNodeInformer(nodeInformer informerv1.NodeInformer) {
 	nodeInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
@@ -208,7 +208,7 @@ func (v *VirtualK8S) buildNodeInformer(nodeInformer v12.NodeInformer) {
 	)
 }
 
-func (v *VirtualK8S) buildPodInformer(podInformer v12.PodInformer) {
+func (v *VirtualK8S) buildPodInformer(podInformer informerv1.PodInformer) {
 	podInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
