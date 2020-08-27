@@ -72,12 +72,17 @@ func (v *VirtualK8S) ConfigureNode(ctx context.Context, node *corev1.Node) {
 // Ping tries to connect to client cluster
 // implement node.NodeProvider
 func (v *VirtualK8S) Ping(ctx context.Context) error {
-	_, err := v.client.Discovery().ServerVersion()
+	// If node or master ping fail, we should it as a failed ping
+	_, err := v.master.Discovery().ServerVersion()
 	if err != nil {
 		klog.Error("Failed ping")
-		return fmt.Errorf("could not list component statuses: %v", err)
+		return fmt.Errorf("could not list master apiserver statuses: %v", err)
 	}
-
+	_, err = v.client.Discovery().ServerVersion()
+	if err != nil {
+		klog.Error("Failed ping")
+		return fmt.Errorf("could not list client apiserver statuses: %v", err)
+	}
 	return nil
 }
 

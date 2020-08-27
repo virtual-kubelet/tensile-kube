@@ -89,8 +89,6 @@ func (v *VirtualK8S) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 	wait.PollImmediate(100*time.Millisecond, 1*time.Second, func() (bool, error) {
 
 		klog.V(4).Info("Trying to creating secret and service account")
-		// TODO: Instead of creating secrets in the target cluster, could read the secrets in the master
-		// and use an init container to write them into the pod?
 		if err = v.createSecrets(ctx, secretNames, pod.Namespace); err != nil {
 			klog.Error(err)
 			return false, nil

@@ -132,7 +132,6 @@ func (m MultiSchedulingPlugin) Filter(pc *framework.PluginContext, pod *v1.Pod, 
 // New initializes a new plugin and returns it.
 func New(configuration *runtime.Unknown, f framework.FrameworkHandle) (framework.Plugin, error) {
 	var configs ClusterConfigurations
-	// TODO: decode it in a better way
 	if err := json.Unmarshal(configuration.Raw, &configs); err != nil {
 		klog.Errorf("Failed to decode %+v: %v", configuration.Raw, err)
 		return nil, fmt.Errorf("failed to decode configuration: %v", err)
