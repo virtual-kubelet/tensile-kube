@@ -176,7 +176,12 @@ kubectl apply -f hack/webhook.yaml
 kubectl apply -f hack/descheduler.yaml
 ```
 
-## Contributors
+## Main Contributors
 
 - [Weidong Cai](https://github.com/cwdsuzhou) from Tencent Games
 - [Ye Yin](https://github.com/hustcat) from Tencent Games
+
+## Other Contributors
+- [Runzhong Liu](https://github.com/runzhliu)
+- [LeoLiuYan](https://github.com/LeoLiuYan)
+- [Thomas](https://github.com/tghartland)
