@@ -47,7 +47,6 @@ var (
 	k8sVersion           = "v1.14.3"
 	numberOfWorkers      = 50
 	ignoreLabels         = ""
-	disableRBAC          = false
 	enableControllers    = ""
 	enableServiceAccount = true
 )
