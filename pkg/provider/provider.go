@@ -262,7 +262,7 @@ func (v *VirtualK8S) buildPodInformer(podInformer informerv1.PodInformer) {
 					}
 					v.updateVKCapacityFromPod(oldCopy, newCopy)
 				}
-				if !reflect.DeepEqual(oldCopy.Status, newCopy.Status) {
+				if !reflect.DeepEqual(oldCopy.Status, newCopy.Status) || newCopy.DeletionTimestamp != nil {
 					util.TrimObjectMeta(&newCopy.ObjectMeta)
 					v.updatedPod <- newCopy
 				}
