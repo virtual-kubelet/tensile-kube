@@ -117,6 +117,7 @@ func TrimObjectMeta(meta *metav1.ObjectMeta) {
 	meta.ResourceVersion = ""
 	meta.SelfLink = ""
 	meta.OwnerReferences = nil
+	meta.DeletionGracePeriodSeconds = nil
 }
 
 // RecoverLabels recover some label that have been removed

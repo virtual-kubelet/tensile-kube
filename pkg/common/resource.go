@@ -120,16 +120,16 @@ func (r *Resource) Sub(nc *Resource) {
 // SetCapacityToNode set the resource the virtual-kubelet node
 func (r *Resource) SetCapacityToNode(node *corev1.Node) {
 	var CPU, mem, Pods, empStorage resource.Quantity
-	if !r.CPU.IsZero() {
+	if r.CPU.Sign() >= 0 {
 		CPU = r.CPU
 	}
-	if !r.Memory.IsZero() {
+	if r.Memory.Sign() >= 0 {
 		mem = r.Memory
 	}
-	if !r.Pods.IsZero() {
+	if r.Pods.Sign() >= 0 {
 		Pods = r.Pods
 	}
-	if !r.EphemeralStorage.IsZero() {
+	if r.EphemeralStorage.Sign() >= 0 {
 		empStorage = r.EphemeralStorage
 	}
 	node.Status.Capacity = corev1.ResourceList{

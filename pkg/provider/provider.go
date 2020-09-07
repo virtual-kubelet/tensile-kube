@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/virtual-kubelet/node-cli/manager"
 	"github.com/virtual-kubelet/node-cli/opts"
@@ -29,7 +30,8 @@ type ClientConfig struct {
 	// allowed burst of the kube client
 	KubeClientBurst int
 	// config path of the kube client
-	ClientKubeConfigPath string
+	ClientKubeConfigPath       string
+	ClientInformerResyncPeriod time.Duration
 }
 
 type clientCache struct {
@@ -93,7 +95,7 @@ func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 		return nil, fmt.Errorf("could not get target cluster server version: %v", err)
 	}
 
-	informer := kubeinformers.NewSharedInformerFactory(client, 0)
+	informer := kubeinformers.NewSharedInformerFactory(client, cc.ClientInformerResyncPeriod)
 	podInformer := informer.Core().V1().Pods()
 	nsInformer := informer.Core().V1().Namespaces()
 	nodeInformer := informer.Core().V1().Nodes()
@@ -286,7 +288,6 @@ func (v *VirtualK8S) updateVKCapacityFromNode(old, new *corev1.Node) {
 	if !old.Spec.Unschedulable && new.Spec.Unschedulable || oldStatus && !newStatus {
 		v.providerNode.AddResource(v.getResourceFromPodsByNodeName(old.Name))
 		v.providerNode.SubResource(toRemove)
-
 	}
 	if !reflect.DeepEqual(old.Status.Allocatable, new.Status.Allocatable) ||
 		!reflect.DeepEqual(old.Status.Capacity, new.Status.Capacity) {
