@@ -49,6 +49,7 @@ var (
 	ignoreLabels         = ""
 	enableControllers    = ""
 	enableServiceAccount = true
+	providerName         = "k8s"
 )
 
 func main() {
@@ -77,13 +78,13 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	o.Provider = "k8s"
+	o.Provider = providerName
 	o.PodSyncWorkers = numberOfWorkers
-	o.Version = strings.Join([]string{k8sVersion, "vk-k8s", buildVersion}, "-")
+	o.Version = strings.Join([]string{k8sVersion, providerName, buildVersion}, "-")
 	o.RateLimiter = rateLimiter()
 	node, err := cli.New(ctx,
 		cli.WithBaseOpts(o),
-		cli.WithProvider("k8s", func(cfg provider.InitConfig) (provider.Provider, error) {
+		cli.WithProvider(providerName, func(cfg provider.InitConfig) (provider.Provider, error) {
 			cfg.ConfigPath = o.KubeConfigPath
 			provider, err := k8sprovider.NewVirtualK8S(cfg, &cc, ignoreLabels, enableServiceAccount, o)
 			if err == nil {
