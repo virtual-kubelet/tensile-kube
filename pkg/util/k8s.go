@@ -68,7 +68,7 @@ const (
 	TaintNodeUnreachable = "node.kubernetes.io/unreachable"
 	// CreatedbyDescheduler is used to mark if a pod is re-created by descheduler
 	CreatedbyDescheduler = "create-by-descheduler"
-
+	// DescheduleCount is used for recording deschedule count
 	DescheduleCount = "sigs.k8s.io/deschedule-count"
 )
 
