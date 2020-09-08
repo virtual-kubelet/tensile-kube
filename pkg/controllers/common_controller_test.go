@@ -76,12 +76,11 @@ func TestCommonController_RunUpdateConfigMap(t *testing.T) {
 	for _, c := range cases {
 		t.Logf("Running case :%v", c.name)
 		success := false
-		b.client.CoreV1().ConfigMaps(c.configMap.Namespace).Update(newConfigMap())
 		if _, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Update(c.configMap); err != nil {
 			t.Fatal(err)
 		}
 
-		wait.Poll(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+		wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
 			configMapCopy, err = b.c.clientConfigMapLister.ConfigMaps(c.configMap.Namespace).Get(configMap.Name)
 			if err != nil {
 				return false, err
@@ -135,12 +134,11 @@ func TestCommonController_RunUpdateSecret(t *testing.T) {
 	for _, c := range cases {
 		t.Logf("Running case :%v", c.name)
 		success := false
-		b.client.CoreV1().Secrets(c.secret.Namespace).Update(newSecret())
 		if _, err = b.master.CoreV1().Secrets(c.secret.Namespace).Update(c.secret); err != nil {
 			t.Fatal(err)
 		}
 
-		wait.Poll(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+		wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
 			secretCopy, err = b.c.clientSecretLister.Secrets(c.secret.Namespace).Get(c.secret.Name)
 			if err != nil {
 				return false, err

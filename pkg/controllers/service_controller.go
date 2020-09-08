@@ -144,7 +144,7 @@ func (ctrl *ServiceController) serviceAdded(obj interface{}) {
 // serviceUpdated reacts to a VolumeAttachment update
 func (ctrl *ServiceController) serviceUpdated(old, new interface{}) {
 	newService := new.(*v1.Service)
-	if ctrl.shouldEnqueue(&newService.ObjectMeta) && IsObjectGlobal(&newService.ObjectMeta){
+	if ctrl.shouldEnqueue(&newService.ObjectMeta) && IsObjectGlobal(&newService.ObjectMeta) {
 		key, err := cache.MetaNamespaceKeyFunc(new)
 		if err != nil {
 			runtime.HandleError(err)
@@ -160,7 +160,7 @@ func (ctrl *ServiceController) serviceUpdated(old, new interface{}) {
 // endpointsAdded reacts to a Endpoints creation
 func (ctrl *ServiceController) endpointsAdded(obj interface{}) {
 	endpoints := obj.(*v1.Endpoints)
-	if ctrl.shouldEnqueue(&endpoints.ObjectMeta){
+	if ctrl.shouldEnqueue(&endpoints.ObjectMeta) {
 		key, err := cache.MetaNamespaceKeyFunc(obj)
 		if err != nil {
 			runtime.HandleError(err)
