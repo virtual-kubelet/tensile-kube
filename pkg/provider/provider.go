@@ -241,7 +241,7 @@ func (v *VirtualK8S) buildPodInformer(podInformer informerv1.PodInformer) {
 					}
 					return
 				}
-				v.updatedPod <- pod
+				v.updatedPod <- podCopy
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
 				if !v.configured {
@@ -261,6 +261,7 @@ func (v *VirtualK8S) buildPodInformer(podInformer informerv1.PodInformer) {
 						return
 					}
 					v.updateVKCapacityFromPod(oldCopy, newCopy)
+					return
 				}
 				if !reflect.DeepEqual(oldCopy.Status, newCopy.Status) || newCopy.DeletionTimestamp != nil {
 					util.TrimObjectMeta(&newCopy.ObjectMeta)
@@ -300,7 +301,7 @@ func (v *VirtualK8S) buildPodInformer(podInformer informerv1.PodInformer) {
 					}
 					return
 				}
-				v.updatedPod <- pod
+				v.updatedPod <- podCopy
 			},
 		},
 	)
