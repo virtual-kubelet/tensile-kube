@@ -19,6 +19,7 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/virtual-kubelet/tensile-kube/pkg/util"
@@ -147,6 +148,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 			klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
 			return false, nil
 		}
+		addDescheduleCount(podCopy)
 		_, err = pe.client.CoreV1().Pods(podCopy.Namespace).Create(podCopy)
 		klog.V(4).Infof("New pod %+v", podCopy)
 
@@ -304,4 +306,24 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		return fmt.Errorf("pod not found when evicting %q: %v", pod.Name, err)
 	}
 	return err
+}
+
+func addDescheduleCount(pod *v1.Pod) {
+	if pod == nil {
+		return
+	}
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{util.DescheduleCount: strconv.Itoa(1)}
+		return
+	}
+	countStr, ok := pod.Annotations[util.DescheduleCount]
+	if !ok {
+		pod.Annotations[util.DescheduleCount] = strconv.Itoa(1)
+		return
+	}
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		count = 0
+	}
+	pod.Annotations = map[string]string{util.DescheduleCount: strconv.Itoa(count + 1)}
 }

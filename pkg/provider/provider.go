@@ -267,6 +267,41 @@ func (v *VirtualK8S) buildPodInformer(podInformer informerv1.PodInformer) {
 					v.updatedPod <- newCopy
 				}
 			},
+			DeleteFunc: func(obj interface{}) {
+				if !v.configured {
+					return
+				}
+				pod, ok := obj.(*corev1.Pod)
+				if !ok {
+					return
+				}
+				podCopy := pod.DeepCopy()
+				util.TrimObjectMeta(&podCopy.ObjectMeta)
+				if !util.IsVirtualPod(podCopy) {
+					if v.providerNode.Node == nil {
+						return
+					}
+					if podStopped(pod) {
+						return
+					}
+					// Pod created only by lower cluster
+					// we should change the node resource
+					if len(podCopy.Spec.NodeName) != 0 {
+						podResource := util.GetRequestFromPod(podCopy)
+						podResource.Pods = resource.MustParse("1")
+						v.providerNode.AddResource(podResource)
+						klog.Infof("Lower cluster add pod %s, resource: %v, node: %v",
+							podCopy.Name, podResource, v.providerNode.Status.Capacity)
+						if v.providerNode.Node == nil {
+							return
+						}
+						copy := v.providerNode.DeepCopy()
+						v.updatedNode <- copy
+					}
+					return
+				}
+				v.updatedPod <- pod
+			},
 		},
 	)
 }
@@ -317,8 +352,7 @@ func (v *VirtualK8S) updateVKCapacityFromPod(old, new *corev1.Pod) {
 			new.Name, newResource, v.providerNode.Status.Capacity)
 	}
 	// delete pod
-	if old.DeletionTimestamp == nil && new.DeletionTimestamp != nil && !podStopped(new) ||
-		old.Status.Phase == corev1.PodRunning && podStopped(new) {
+	if old.Status.Phase == corev1.PodRunning && podStopped(new) {
 		klog.Infof("Lower cluster delete pod %s, resource: %v", new.Name, newResource)
 		newResource.Pods = resource.MustParse("1")
 		v.providerNode.AddResource(newResource)
