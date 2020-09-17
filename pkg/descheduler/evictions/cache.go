@@ -17,6 +17,7 @@
 package evictions
 
 import (
+	"sync"
 	"time"
 
 	gochache "github.com/patrickmn/go-cache"
@@ -25,6 +26,7 @@ import (
 // UnschedulableCache contains cache ownerid/node/freezeTime
 type UnschedulableCache struct {
 	cache map[string]*gochache.Cache
+	sync.RWMutex
 }
 
 // NewUnschedulableCache init the cache
@@ -33,6 +35,8 @@ func NewUnschedulableCache() *UnschedulableCache {
 }
 
 func (c *UnschedulableCache) add(node, ownerID string) {
+	c.Lock()
+	defer c.Unlock()
 	now := time.Now()
 	freezeCache := c.cache[ownerID]
 	if freezeCache == nil {
@@ -43,6 +47,8 @@ func (c *UnschedulableCache) add(node, ownerID string) {
 }
 
 func (c *UnschedulableCache) getFreezeTime(node, ownerID string) *time.Time {
+	c.RLock()
+	defer c.RUnlock()
 	if c.cache[ownerID] == nil {
 		return nil
 	}
