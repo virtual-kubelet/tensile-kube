@@ -19,7 +19,9 @@ package evictions
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/virtual-kubelet/tensile-kube/pkg/util"
@@ -49,8 +51,10 @@ type PodEvictor struct {
 	freezeDuration     time.Duration
 	record             record.EventRecorder
 	base               evictions.PodEvictor
+	nodeNum            int
 	*UnschedulableCache
 	CheckUnschedulablePods bool
+	sync.RWMutex
 }
 
 // NewPodEvictor init a new evictor
@@ -71,12 +75,20 @@ func NewPodEvictor(
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: client.CoreV1().Events(v1.NamespaceAll)})
 	r := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "sigs.k8s.io.descheduler"})
 
+	virtualCount := 0
+	for node := range nodePodCount {
+		if util.IsVirtualNode(node) && !node.Spec.Unschedulable {
+			virtualCount++
+		}
+	}
+
 	return &PodEvictor{
 		client:             client,
 		policyGroupVersion: policyGroupVersion,
 		dryRun:             dryRun,
 		maxPodsToEvict:     maxPodsToEvict,
 		nodepodCount:       nodePodCount,
+		nodeNum:            virtualCount,
 		freezeDuration:     5 * time.Minute,
 		record:             r,
 		UnschedulableCache: unschedulableCache,
@@ -101,9 +113,12 @@ func (pe *PodEvictor) TotalEvicted() int {
 // possible (due to maxPodsToEvict constraint). Success is true when the pod
 // is evicted on the server side.
 func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, error) {
+	pe.RLock()
 	if pe.maxPodsToEvict > 0 && pe.nodepodCount[node]+1 > pe.maxPodsToEvict {
+		pe.RUnlock()
 		return false, fmt.Errorf("Maximum number %v of evicted pods per %q node reached", pe.maxPodsToEvict, node.Name)
 	}
+	pe.RUnlock()
 
 	nodeName := pod.Spec.NodeName
 	podCopy := pod.DeepCopy()
@@ -115,52 +130,52 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	}
 	podCopy.Labels[util.CreatedbyDescheduler] = "true"
 	podCopy.Status = v1.PodStatus{}
+
+	ownerID := pod.Name
 	ownerCount := len(pod.OwnerReferences)
-	ownerID := string(pod.OwnerReferences[ownerCount-1].UID)
-	pe.add(nodeName, ownerID)
-	time := pe.getFreezeTime(nodeName, ownerID)
-	klog.V(4).Info(time)
-	affinity, count := pe.replacePodNodeNameNodeAffinity(pod.Spec.Affinity, nodeName,
-		ownerID)
-	if count == len(pe.nodepodCount) || nodeName == "" {
-		if pod.Labels != nil && pod.Labels[util.CreatedbyDescheduler] == "true" {
-			err := evictPod(ctx, pe.client, pod, pe.policyGroupVersion, pe.dryRun)
-			if err != nil {
-				// err is used only for logging purposes
-				klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
-				return false, nil
-			}
-			pe.record.Event(pod, v1.EventTypeNormal, "Descheduled", "pod evicted by sigs.k8s.io/descheduler")
-
-		}
-	} else {
-		podCopy.Spec.Affinity = affinity
-		klog.Infof("New pod affinity %+v", podCopy.Spec.Affinity)
-		propagationPolicy := metav1.DeletePropagationBackground
-		deleteOptions := &metav1.DeleteOptions{
-			GracePeriodSeconds: new(int64),
-			PropagationPolicy:  &propagationPolicy,
-		}
-		err := pe.client.CoreV1().Pods(podCopy.Namespace).Delete(podCopy.Name, deleteOptions)
-
-		if err != nil {
-			// err is used only for logging purposes
-			klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
-			return false, nil
-		}
-		addDescheduleCount(podCopy)
-		_, err = pe.client.CoreV1().Pods(podCopy.Namespace).Create(podCopy)
-		klog.V(4).Infof("New pod %+v", podCopy)
-
-		if err != nil {
-			// err is used only for logging purposes
-			klog.Errorf("Error re-create pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
-			return false, nil
-		}
-		pe.record.Event(pod, v1.EventTypeNormal, "Rescheduled", "pod re-create by sigs.k8s.io/descheduler")
-		klog.Infof("Re-create pod: %#v in namespace %#v success", pod.Name, pod.Namespace)
+	if ownerCount != 0 {
+		ownerID = string(pod.OwnerReferences[ownerCount-1].UID)
 	}
+	pe.add(nodeName, ownerID)
+	ti := pe.getFreezeTime(nodeName, ownerID)
+	klog.V(4).Info(ti)
+	affinity, _ := pe.replacePodNodeNameNodeAffinity(pod.Spec.Affinity, nodeName,
+		ownerID)
+
+	podCopy.Spec.Affinity = affinity
+	klog.Infof("New pod affinity %+v", podCopy.Spec.Affinity)
+	propagationPolicy := metav1.DeletePropagationBackground
+	deleteOptions := &metav1.DeleteOptions{
+		GracePeriodSeconds: new(int64),
+		PropagationPolicy:  &propagationPolicy,
+	}
+	err := pe.client.CoreV1().Pods(podCopy.Namespace).Delete(podCopy.Name, deleteOptions)
+
+	if err != nil && !apierrors.IsNotFound(err) {
+		// err is used only for logging purposes
+		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
+		return false, nil
+	}
+	rand.Seed(time.Now().UnixNano())
+	if ownerID == pod.Name {
+		time.Sleep(time.Duration(rand.Intn(10000)) * time.Millisecond)
+	}
+
+	addDescheduleCount(podCopy)
+
+	_, err = pe.client.CoreV1().Pods(podCopy.Namespace).Create(podCopy)
+	klog.V(4).Infof("New pod %+v", podCopy)
+
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		// err is used only for logging purposes
+		klog.Errorf("Error re-create pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
+		return false, nil
+	}
+	pe.record.Event(pod, v1.EventTypeNormal, "Rescheduled", "pod re-create by sigs.k8s.io/descheduler")
+	klog.Infof("Re-create pod: %#v in namespace %#v success", pod.Name, pod.Namespace)
+	pe.Lock()
 	pe.nodepodCount[node]++
+	pe.Unlock()
 	if pe.dryRun {
 		klog.V(1).Infof("Evicted pod in dry run mode: %#v in namespace %#v", pod.Name, pod.Namespace)
 	} else {
@@ -241,7 +256,9 @@ func (pe *PodEvictor) replacePodNodeNameNodeAffinity(affinity *v1.Affinity, node
 						values = append(values, v)
 					}
 				}
-				me.Values = append(values, nodeSelReq.Values...)
+				if nodeName != "" {
+					me.Values = append(values, nodeSelReq.Values...)
+				}
 				count = len(values)
 				mes = append(mes, me)
 				continue

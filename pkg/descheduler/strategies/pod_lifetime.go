@@ -18,10 +18,12 @@ package strategies
 
 import (
 	"context"
+	"sync"
 
 	v1 "k8s.io/api/core/v1"
 	v1meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/pkg/api"
 
@@ -35,37 +37,47 @@ func PodLifeTime(ctx context.Context, client clientset.Interface, strategy api.D
 		klog.V(1).Infof("MaxPodLifeTimeSeconds not set")
 		return
 	}
-
+	var wg sync.WaitGroup
 	for _, node := range nodes {
-		klog.V(1).Infof("Processing node: %#v", node.Name)
-		pods := listOldPodsOnNode(client, node, *strategy.Params.MaxPodLifeTimeSeconds, evictLocalStoragePods)
-		for _, pod := range pods {
-			success, err := podEvictor.EvictPod(ctx, pod, node)
-			if success {
-				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
+		go func(node *v1.Node) {
+			wg.Add(1)
+			defer wg.Done()
+			klog.V(1).Infof("Processing node: %#v", node.Name)
+			pods := listOldPodsOnNode(client, node, *strategy.Params.MaxPodLifeTimeSeconds, evictLocalStoragePods)
+
+			f := func(idx int) {
+				success, err := podEvictor.EvictPod(ctx, pods[idx], node)
+				if success {
+					klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pods[idx].Name, *strategy.Params.MaxPodLifeTimeSeconds)
+				}
+
+				if err != nil {
+					klog.Errorf("Error evicting pod: (%#v)", err)
+					return
+				}
 			}
 
-			if err != nil {
-				klog.Errorf("Error evicting pod: (%#v)", err)
-				break
-			}
-		}
+			workqueue.ParallelizeUntil(context.TODO(), 64, len(pods), f)
+		}(node)
 	}
+	wg.Wait()
 	if podEvictor.CheckUnschedulablePods {
 		klog.V(1).Info("Processing unschedulabe pods")
-		pods := listOldPodsOnNode(client, &v1.Node{}, (*strategy.Params.MaxPodLifeTimeSeconds)*10,
+		pods := listOldPodsOnNode(client, &v1.Node{}, (*strategy.Params.MaxPodLifeTimeSeconds)*3,
 			evictLocalStoragePods)
-		for _, pod := range pods {
-			success, err := podEvictor.EvictPod(ctx, pod, &v1.Node{})
+		f := func(idx int) {
+			success, err := podEvictor.EvictPod(ctx, pods[idx], &v1.Node{})
 			if success {
-				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pod.Name, *strategy.Params.MaxPodLifeTimeSeconds)
+				klog.V(1).Infof("Evicted pod: %#v because it was created more than %v seconds ago", pods[idx].Name, *strategy.Params.MaxPodLifeTimeSeconds)
 			}
 
 			if err != nil {
 				klog.Errorf("Error evicting pod: (%#v)", err)
-				break
+				return
 			}
 		}
+
+		workqueue.ParallelizeUntil(context.TODO(), 64, len(pods), f)
 	}
 }
 

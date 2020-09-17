@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	clientset "k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/pkg/api"
 	"sigs.k8s.io/descheduler/pkg/descheduler"
@@ -39,7 +40,10 @@ import (
 // Run start a descheduler server
 func Run(rs *options.DeschedulerServer) error {
 	ctx := context.Background()
-	rsclient, err := util.NewClient(rs.KubeconfigFile)
+	rsclient, err := util.NewClient(rs.KubeconfigFile, func(c *rest.Config) {
+		c.QPS = 100
+		c.Burst = 200
+	})
 	if err != nil {
 		return err
 	}
