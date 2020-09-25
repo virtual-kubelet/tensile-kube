@@ -60,6 +60,7 @@ type HookServer interface {
 	Serve(http.ResponseWriter, *http.Request)
 }
 
+// webhookServer is a sever for webhook
 type webhookServer struct {
 	ignoreSelectorKeys []string
 	pvcLister          v1.PersistentVolumeClaimLister

@@ -222,7 +222,8 @@ func (v *VirtualK8S) GetPods(_ context.Context) ([]*corev1.Pod, error) {
 }
 
 // GetContainerLogs retrieves the logs of a container by name from the provider.
-func (v *VirtualK8S) GetContainerLogs(ctx context.Context, namespace string, podName string, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
+func (v *VirtualK8S) GetContainerLogs(ctx context.Context, namespace string,
+	podName string, containerName string, opts api.ContainerLogOpts) (io.ReadCloser, error) {
 	tailLine := int64(opts.Tail)
 	limitBytes := int64(opts.LimitBytes)
 	sinceSeconds := opts.SinceSeconds
@@ -517,10 +518,13 @@ func (v *VirtualK8S) patchConfigMap(cm, clone *corev1.ConfigMap) (*corev1.Config
 	return newCM, nil
 }
 
+// termSize helps exec termSize
 type termSize struct {
 	attach api.AttachIO
 }
 
+// Next returns the new terminal size after the terminal has been resized. It returns nil when
+// monitoring has been stopped.
 func (t *termSize) Next() *remotecommand.TerminalSize {
 	resize := <-t.attach.Resize()
 	return &remotecommand.TerminalSize{
