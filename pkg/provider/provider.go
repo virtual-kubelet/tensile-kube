@@ -32,6 +32,7 @@ type ClientConfig struct {
 	ClientKubeConfigPath string
 }
 
+// clientCache wraps the lister of client cluster
 type clientCache struct {
 	podLister    v1.PodLister
 	nsLister     v1.NamespaceLister

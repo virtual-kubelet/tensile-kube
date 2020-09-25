@@ -53,7 +53,8 @@ func Config(c schedulerappconfig.Config, master string) (*schedulerappconfig.Con
 }
 
 // createClients creates a kube client and an event client from the given config and masterOverride.
-func createClients(config componentbaseconfig.ClientConnectionConfiguration, masterOverride string, timeout time.Duration) (clientset.Interface, clientset.Interface, clientset.Interface, error) {
+func createClients(config componentbaseconfig.ClientConnectionConfiguration,
+	masterOverride string, timeout time.Duration) (clientset.Interface, clientset.Interface, clientset.Interface, error) {
 	if len(config.Kubeconfig) == 0 && len(masterOverride) == 0 {
 		klog.Warningf("Neither --kubeconfig nor --master was specified. Using default API client. This might not work.")
 	}
