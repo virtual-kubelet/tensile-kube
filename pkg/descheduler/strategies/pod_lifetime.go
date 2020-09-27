@@ -95,7 +95,7 @@ func listOldPodsOnNode(client clientset.Interface, node *v1.Node, maxAge uint, e
 			continue
 		}
 		for _, condition := range pod.Status.Conditions {
-			if condition.Type == v1.PodScheduled && condition.Reason == "Unschedulable" {
+			if condition.Type == v1.PodScheduled && (condition.Reason == "Unschedulable" || condition.Reason == "SchedulerError") {
 				oldPods = append(oldPods, pod)
 				break
 			}
