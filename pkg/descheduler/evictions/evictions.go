@@ -19,16 +19,15 @@ package evictions
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 	v1 "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	mergetypes "k8s.io/apimachinery/pkg/types"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -36,6 +35,12 @@ import (
 	"k8s.io/klog"
 	"sigs.k8s.io/descheduler/pkg/descheduler/evictions"
 	eutils "sigs.k8s.io/descheduler/pkg/descheduler/evictions/utils"
+
+	"github.com/virtual-kubelet/tensile-kube/pkg/util"
+)
+
+const (
+	unschedulableNode = "unschedulable-node"
 )
 
 // nodePodEvictedCount keeps count of pods evicted on node
@@ -52,7 +57,7 @@ type PodEvictor struct {
 	record             record.EventRecorder
 	base               evictions.PodEvictor
 	nodeNum            int
-	*UnschedulableCache
+	*util.UnschedulableCache
 	CheckUnschedulablePods bool
 	sync.RWMutex
 }
@@ -63,7 +68,7 @@ func NewPodEvictor(
 	policyGroupVersion string,
 	dryRun bool,
 	maxPodsToEvict int,
-	nodes []*v1.Node, unschedulableCache *UnschedulableCache) *PodEvictor {
+	nodes []*v1.Node, unschedulableCache *util.UnschedulableCache) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
 	for _, node := range nodes {
 		// Initialize podsEvicted till now with 0.
@@ -136,11 +141,11 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	if ownerCount != 0 {
 		ownerID = string(pod.OwnerReferences[ownerCount-1].UID)
 	}
-	pe.add(nodeName, ownerID)
-	ti := pe.getFreezeTime(nodeName, ownerID)
+	pe.Add(nodeName, ownerID)
+	ti := pe.GetFreezeTime(nodeName, ownerID)
 	klog.V(4).Info(ti)
-	affinity, _ := pe.replacePodNodeNameNodeAffinity(pod.Spec.Affinity, nodeName,
-		ownerID)
+	affinity, _ := util.ReplacePodNodeNameNodeAffinity(pod.Spec.Affinity,
+		ownerID, pe.freezeDuration, pe.isNodeFreeze, nodeName)
 
 	podCopy.Spec.Affinity = affinity
 	klog.Infof("New pod affinity %+v", podCopy.Spec.Affinity)
@@ -149,18 +154,26 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 		GracePeriodSeconds: new(int64),
 		PropagationPolicy:  &propagationPolicy,
 	}
-	err := pe.client.CoreV1().Pods(podCopy.Namespace).Delete(podCopy.Name, deleteOptions)
+	copy := pod.DeepCopy()
+	addUnschedulablenode(copy)
+	patch, err := util.CreateMergePatch(pod, copy)
+	if err != nil {
+		return false, err
+	}
+	_, err = pe.client.CoreV1().Pods(pod.Namespace).Patch(copy.Name,
+		mergetypes.MergePatchType, patch)
+	if err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
+		return false, err
+	}
 
+	err = pe.client.CoreV1().Pods(podCopy.Namespace).Delete(podCopy.Name, deleteOptions)
 	if err != nil && !apierrors.IsNotFound(err) {
 		// err is used only for logging purposes
 		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
-		return false, nil
-	}
-	rand.Seed(time.Now().UnixNano())
-	if ownerID == pod.Name {
-		time.Sleep(time.Duration(rand.Intn(10000)) * time.Millisecond)
-	}
+		return false, err
 
+	}
 	addDescheduleCount(podCopy)
 
 	_, err = pe.client.CoreV1().Pods(podCopy.Namespace).Create(podCopy)
@@ -184,101 +197,10 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	return true, nil
 }
 
-// replacePodNodeNameNodeAffinity replaces the RequiredDuringSchedulingIgnoredDuringExecution
-// NodeAffinity of the given affinity with a new NodeAffinity that selects the given nodeName.
-// Note that this function assumes that no NodeAffinity conflicts with the selected nodeName.
-func (pe *PodEvictor) replacePodNodeNameNodeAffinity(affinity *v1.Affinity, nodeName, ownerID string) (*v1.Affinity,
-	int) {
-	nodeSelReq := v1.NodeSelectorRequirement{
-		// Key:      "metadata.name",
-		Key:      "kubernetes.io/hostname",
-		Operator: v1.NodeSelectorOpNotIn,
-		Values:   []string{nodeName},
-	}
-
-	nodeSelector := &v1.NodeSelector{
-		NodeSelectorTerms: []v1.NodeSelectorTerm{
-			{
-				MatchExpressions: []v1.NodeSelectorRequirement{nodeSelReq},
-			},
-		},
-	}
-
-	count := 1
-
-	if affinity == nil {
-		return &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
-			},
-		}, count
-	}
-
-	if affinity.NodeAffinity == nil {
-		affinity.NodeAffinity = &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
-		}
-		return affinity, count
-	}
-
-	nodeAffinity := affinity.NodeAffinity
-
-	if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
-		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = nodeSelector
-		return affinity, count
-	}
-
-	terms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
-	if terms == nil {
-		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []v1.NodeSelectorTerm{
-			{
-				MatchFields: []v1.NodeSelectorRequirement{nodeSelReq},
-			},
-		}
-		return affinity, count
-	}
-
-	newTerms := make([]v1.NodeSelectorTerm, 0)
-	for _, term := range terms {
-		if term.MatchExpressions == nil {
-			continue
-		}
-		mes := make([]v1.NodeSelectorRequirement, 0)
-		for _, me := range term.MatchExpressions {
-			if me.Key == nodeSelReq.Key && me.Operator == nodeSelReq.Operator {
-				values := make([]string, 0)
-				for _, v := range me.Values {
-					klog.V(4).Infof("current term value %v", v)
-					if v == nodeName {
-						continue
-					}
-					if pe.isNodeFreeze(v, ownerID, pe.freezeDuration) {
-						values = append(values, v)
-					}
-				}
-				if nodeName != "" {
-					me.Values = append(values, nodeSelReq.Values...)
-				}
-				count = len(values)
-				mes = append(mes, me)
-				continue
-			}
-			mes = append(mes, me)
-		}
-		term.MatchExpressions = mes
-		newTerms = append(newTerms, term)
-	}
-
-	// Replace node selector with the new one.
-	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = newTerms
-	affinity.NodeAffinity = nodeAffinity
-	return affinity, count
-}
-
-func (pe *PodEvictor) isNodeFreeze(node, ownerID string,
+func (pe *PodEvictor) isNodeFreeze(node, ownerId string,
 	freezeDuration time.Duration) bool {
-	freezeTime := pe.getFreezeTime(node, ownerID)
-	klog.V(4).Infof("OwnerID %v, node %v, time %v", ownerID, node, freezeTime)
+	freezeTime := pe.GetFreezeTime(node, ownerId)
+	klog.V(4).Infof("OwnerID %v, node %v, time %v", ownerId, node, freezeTime)
 	if freezeTime == nil {
 		return false
 	}
@@ -343,4 +265,17 @@ func addDescheduleCount(pod *v1.Pod) {
 		count = 0
 	}
 	pod.Annotations = map[string]string{util.DescheduleCount: strconv.Itoa(count + 1)}
+}
+
+func addUnschedulablenode(pod *v1.Pod) {
+	if pod == nil {
+		return
+	}
+	if pod.Annotations == nil {
+		pod.Annotations = map[string]string{}
+	}
+	if len(pod.Spec.NodeName) > 0 {
+		pod.Annotations[unschedulableNode] = pod.Spec.NodeName
+	}
+	pod.ResourceVersion = "0"
 }

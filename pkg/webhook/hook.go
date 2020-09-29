@@ -35,6 +35,7 @@ import (
 )
 
 var (
+	freezeCache   = util.NewUnschedulableCache()
 	runtimeScheme = runtime.NewScheme()
 	codecs        = serializer.NewCodecFactory(runtimeScheme)
 	deserializer  = codecs.UniversalDeserializer()
@@ -89,9 +90,10 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 	)
 	switch req.Kind.Kind {
 	case "Pod":
-		klog.V(4).Infof("Raw request %v", string(req.Object.Raw))
-		if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
-			klog.Errorf("Could not unmarshal raw object: %v", err)
+		rawBytes := req.Object.Raw
+		klog.V(4).Infof("Raw request %v", string(rawBytes))
+		if err := json.Unmarshal(rawBytes, &pod); err != nil {
+			klog.Errorf("Could not unmarshal raw object %v err: %v", req, err)
 			return &v1beta1.AdmissionResponse{
 				Result: &metav1.Status{
 					Message: err.Error(),
@@ -127,8 +129,38 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 			}
 		}
 	}
-
+	ref := ""
+	if len(pod.OwnerReferences) > 0 {
+		ref = string(pod.OwnerReferences[0].UID)
+	}
 	clone := pod.DeepCopy()
+	switch req.Operation {
+	case v1beta1.Update:
+		node := ""
+		if len(ref) > 0 {
+			if pod.Annotations != nil {
+				node = pod.Annotations["unschedulable-node"]
+			}
+			if len(node) > 0 {
+				klog.Infof("Unschedulable nodes %+v ref %v to cache", node, ref)
+				freezeCache.Add(node, ref)
+			}
+		}
+		return &v1beta1.AdmissionResponse{
+			Allowed: true,
+		}
+	case v1beta1.Create:
+		klog.Infof("Create pod %v node %v, owner %v", clone.Name, clone.Spec.NodeName, ref)
+		if len(ref) > 0 && len(clone.Spec.NodeName) == 0 {
+			nodes := freezeCache.GetFreezeNodes(ref)
+			klog.Infof("Not in nodes %v for %v", nodes, ref)
+			if len(nodes) > 0 {
+				klog.Infof("Create pod %v Not nodes %+v", clone.Name, nodes)
+				clone.Spec.Affinity, _ = util.ReplacePodNodeNameNodeAffinity(clone.Spec.Affinity, ref, 0, nil, nodes...)
+			}
+		}
+	}
+
 	whsvr.trySetNodeName(clone, req.Namespace)
 	inject(clone, whsvr.ignoreSelectorKeys)
 	klog.V(6).Infof("Final obj %+v", clone)
