@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
+	"k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // ClientConfig defines the configuration of a lower cluster
@@ -45,6 +46,7 @@ type clientCache struct {
 type VirtualK8S struct {
 	master               kubernetes.Interface
 	client               kubernetes.Interface
+	metricClient         versioned.Interface
 	config               *rest.Config
 	nodeName             string
 	version              string
@@ -89,6 +91,11 @@ func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 		return nil, fmt.Errorf("could not build clientset for cluster: %v", err)
 	}
 
+	metricClient, err := util.NewMetricClient(cc.ClientKubeConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("could not build clientset for cluster: %v", err)
+	}
+
 	serverVersion, err := client.Discovery().ServerVersion()
 	if err != nil {
 		return nil, fmt.Errorf("could not get target cluster server version: %v", err)
@@ -106,6 +113,7 @@ func NewVirtualK8S(cfg provider.InitConfig, cc *ClientConfig,
 	virtualK8S := &VirtualK8S{
 		master:               master,
 		client:               client,
+		metricClient:         metricClient,
 		nodeName:             cfg.NodeName,
 		ignoreLabels:         ignoreLabels,
 		version:              serverVersion.GitVersion,
