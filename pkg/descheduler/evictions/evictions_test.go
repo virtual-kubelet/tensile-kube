@@ -18,15 +18,12 @@ package evictions
 
 import (
 	"context"
-	"testing"
-	"time"
-
-	"github.com/patrickmn/go-cache"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	core "k8s.io/client-go/testing"
 	"sigs.k8s.io/descheduler/test"
+	"testing"
 )
 
 func TestEvictPod(t *testing.T) {
@@ -66,21 +63,4 @@ func TestEvictPod(t *testing.T) {
 			t.Errorf("Test error for Desc: %s. Expected %v pod eviction to be %v, got %v", test.description, test.pod.Name, test.want, got)
 		}
 	}
-}
-
-func TestCache(t *testing.T) {
-	uc := UnschedulableCache{cache: map[string]*cache.Cache{}}
-	uc.add("test", "1")
-	time.Sleep(5 * time.Second)
-	uc.add("test", "2")
-	ft := uc.getFreezeTime("test", "1")
-	if ft == nil {
-		t.Fatal("Unexpected results")
-	}
-	t.Log(ft)
-	ft1 := uc.getFreezeTime("test", "2")
-	if ft1 == nil {
-		t.Fatal("Unexpected results")
-	}
-	t.Log(ft1)
 }

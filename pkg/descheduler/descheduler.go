@@ -80,7 +80,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		"PodLifeTime": strategies.PodLifeTime,
 	}
 
-	unschedulableCache := evictions.NewUnschedulableCache()
+	unschedulableCache := util.NewUnschedulableCache()
 	count := 0
 	wait.Until(func() {
 		count++
