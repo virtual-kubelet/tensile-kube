@@ -3,11 +3,7 @@ module github.com/virtual-kubelet/tensile-kube
 go 1.13
 
 require (
-	github.com/envoyproxy/go-control-plane v0.6.9 // indirect
 	github.com/evanphx/json-patch v4.2.0+incompatible
-	github.com/gogo/googleapis v1.1.0 // indirect
-	github.com/hashicorp/errwrap v1.0.0 // indirect
-	github.com/lyft/protoc-gen-validate v0.0.13 // indirect
 	github.com/mattbaird/jsonpatch v0.0.0-20171005235357-81af80346b1a
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/sirupsen/logrus v1.4.2
@@ -25,8 +21,8 @@ require (
 	k8s.io/kube-openapi v0.0.0-20200410163147-594e756bea31 // indirect
 	k8s.io/kube-scheduler v0.0.0
 	k8s.io/kubernetes v1.17.6
+	k8s.io/metrics v1.17.6
 	sigs.k8s.io/descheduler v0.10.1-0.20200508041036-423ee35846a8
-	sigs.k8s.io/structured-merge-diff v1.0.1 // indirect
 )
 
 replace (

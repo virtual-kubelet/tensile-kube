@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 const (
@@ -168,6 +169,35 @@ func NewClient(configPath string, opts ...Opts) (kubernetes.Interface, error) {
 		return nil, fmt.Errorf("could not create client for master cluster: %v", err)
 	}
 	return client, nil
+}
+
+// NewMetricClient returns a new client for k8s
+func NewMetricClient(configPath string, opts ...Opts) (versioned.Interface, error) {
+	// master config, maybe a real node or a pod
+	var (
+		config *rest.Config
+		err    error
+	)
+	config, err = clientcmd.BuildConfigFromFlags("", configPath)
+	if err != nil {
+		config, err = rest.InClusterConfig()
+		if err != nil {
+			return nil, fmt.Errorf("could not read config file for cluster: %v", err)
+		}
+	}
+
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(config)
+	}
+
+	metricClient, err := versioned.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("could not create client for master cluster: %v", err)
+	}
+	return metricClient, nil
 }
 
 // IsVirtualNode defines if a node is virtual node
