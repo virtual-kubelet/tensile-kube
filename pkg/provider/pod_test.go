@@ -18,7 +18,6 @@ package provider
 
 import (
 	"context"
-	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 	"reflect"
 	"testing"
 
@@ -28,6 +27,8 @@ import (
 	v1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/kubernetes/pkg/controller"
+
+	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 )
 
 func TestCreatePod(t *testing.T) {
