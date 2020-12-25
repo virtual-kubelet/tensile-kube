@@ -175,6 +175,7 @@ func (v *VirtualK8S) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 func (v *VirtualK8S) GetPod(ctx context.Context, namespace string, name string) (*corev1.Pod, error) {
 	pod, err := v.clientCache.podLister.Pods(namespace).Get(name)
 	if err != nil {
+		klog.Error(err)
 		if errors.IsNotFound(err) {
 			return nil, errdefs.AsNotFound(err)
 		}

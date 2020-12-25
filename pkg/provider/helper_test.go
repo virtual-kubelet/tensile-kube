@@ -20,8 +20,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/virtual-kubelet/tensile-kube/pkg/testbase"
 	v1 "k8s.io/api/core/v1"
+
+	"github.com/virtual-kubelet/tensile-kube/pkg/testbase"
 )
 
 func TestGetSecret(t *testing.T) {

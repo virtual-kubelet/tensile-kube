@@ -21,14 +21,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/virtual-kubelet/tensile-kube/pkg/common"
-	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/klog"
+
+	"github.com/virtual-kubelet/tensile-kube/pkg/common"
+	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 )
 
 // ConfigureNode enables a provider to configure the node object that
