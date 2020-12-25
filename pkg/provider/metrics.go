@@ -20,13 +20,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	stats "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
 	"k8s.io/metrics/pkg/apis/metrics/v1beta1"
+
+	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 )
 
 func (v *VirtualK8S) GetStatsSummary(ctx context.Context) (*stats.Summary, error) {
