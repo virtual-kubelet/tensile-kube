@@ -45,6 +45,8 @@ func getSecrets(pod *corev1.Pod) []string {
 		case v.RBD != nil:
 			klog.Infof("pod %s depends on secret %s", pod.Name, v.RBD.SecretRef.Name)
 			secretNames = append(secretNames, v.RBD.SecretRef.Name)
+		default:
+			klog.Warning("Skip other type volumes")
 		}
 	}
 	if pod.Spec.ImagePullSecrets != nil {

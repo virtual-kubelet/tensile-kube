@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"k8s.io/klog"
 	"strings"
 	"time"
 
@@ -140,7 +141,8 @@ func RunController(ctx context.Context, master,
 		case "ServiceControllers":
 			serviceCtrl := buildServiceController(master, client, masterInformer, clientInformer, nsLister)
 			runningControllers = append(runningControllers, serviceCtrl)
-
+		default:
+			klog.Warningf("Skip: %v", c)
 		}
 	}
 	masterInformer.Start(ctx.Done())

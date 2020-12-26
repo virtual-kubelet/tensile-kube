@@ -197,10 +197,107 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	return true, nil
 }
 
-func (pe *PodEvictor) isNodeFreeze(node, ownerId string,
+// replacePodNodeNameNodeAffinity replaces the RequiredDuringSchedulingIgnoredDuringExecution
+// NodeAffinity of the given affinity with a new NodeAffinity that selects the given nodeName.
+// Note that this function assumes that no NodeAffinity conflicts with the selected nodeName.
+func (pe *PodEvictor) replacePodNodeNameNodeAffinity(affinity *v1.Affinity, nodeName, ownerID string) (*v1.Affinity,
+	int) {
+	nodeSelReq := v1.NodeSelectorRequirement{
+		Key:      "kubernetes.io/hostname",
+		Operator: v1.NodeSelectorOpNotIn,
+		Values:   []string{nodeName},
+	}
+
+	nodeSelector := &v1.NodeSelector{
+		NodeSelectorTerms: []v1.NodeSelectorTerm{
+			{
+				MatchExpressions: []v1.NodeSelectorRequirement{nodeSelReq},
+			},
+		},
+	}
+
+	count := 1
+	if affinity == nil {
+		return &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
+			},
+		}, count
+	}
+
+	if affinity.NodeAffinity == nil {
+		affinity.NodeAffinity = &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: nodeSelector,
+		}
+		return affinity, count
+	}
+
+	nodeAffinity := affinity.NodeAffinity
+	if nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
+		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = nodeSelector
+		return affinity, count
+	}
+
+	terms := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms
+	if terms == nil {
+		nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = []v1.NodeSelectorTerm{
+			{
+				MatchFields: []v1.NodeSelectorRequirement{nodeSelReq},
+			},
+		}
+		return affinity, count
+	}
+
+	newTerms := make([]v1.NodeSelectorTerm, 0)
+	for _, term := range terms {
+		if term.MatchExpressions == nil {
+			continue
+		}
+		mes, noScheduleCount := pe.getNodeSelectorRequirement(term, nodeName, ownerID, nodeSelReq)
+		count = noScheduleCount
+		term.MatchExpressions = mes
+		newTerms = append(newTerms, term)
+	}
+
+	// Replace node selector with the new one.
+	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = newTerms
+	affinity.NodeAffinity = nodeAffinity
+	return affinity, count
+}
+
+func (pe *PodEvictor) getNodeSelectorRequirement(term v1.NodeSelectorTerm,
+	nodeName, ownerID string, nodeSelReq v1.NodeSelectorRequirement) ([]v1.NodeSelectorRequirement, int) {
+	mes := make([]v1.NodeSelectorRequirement, 0)
+	count := 0
+	for _, me := range term.MatchExpressions {
+		if me.Key != nodeSelReq.Key || me.Operator != nodeSelReq.Operator {
+			mes = append(mes, me)
+			continue
+		}
+		values := make([]string, 0)
+		for _, v := range me.Values {
+			klog.V(4).Infof("current term value %v", v)
+			if v == nodeName {
+				continue
+			}
+			if pe.isNodeFreeze(v, ownerID, pe.freezeDuration) {
+				values = append(values, v)
+			}
+		}
+		if nodeName != "" {
+			me.Values = append(values, nodeSelReq.Values...)
+		}
+		count = len(values)
+		mes = append(mes, me)
+		continue
+	}
+	return mes, count
+}
+
+func (pe *PodEvictor) isNodeFreeze(node, ownerID string,
 	freezeDuration time.Duration) bool {
-	freezeTime := pe.GetFreezeTime(node, ownerId)
-	klog.V(4).Infof("OwnerID %v, node %v, time %v", ownerId, node, freezeTime)
+	freezeTime := pe.GetFreezeTime(node, ownerID)
+	klog.V(4).Infof("OwnerID %v, node %v, time %v", ownerID, node, freezeTime)
 	if freezeTime == nil {
 		return false
 	}
