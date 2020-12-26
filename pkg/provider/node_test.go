@@ -69,8 +69,7 @@ func TestConfigureNode(t *testing.T) {
 			nodes: []*corev1.Node{nodeNotReady},
 			desiredVirtualNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: "fake"},
-				Status: corev1.NodeStatus{
-				},
+				Status:     corev1.NodeStatus{},
 			},
 		},
 		{

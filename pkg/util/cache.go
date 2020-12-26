@@ -32,10 +32,12 @@ type UnschedulableCache struct {
 	sync.RWMutex
 }
 
+// NewUnschedulableCache init a new Unschedulable
 func NewUnschedulableCache() *UnschedulableCache {
 	return &UnschedulableCache{cache: map[string]*gochache.Cache{}}
 }
 
+// Add add node/ownerID to cache
 func (c *UnschedulableCache) Add(node, ownerID string) {
 	c.Lock()
 	defer c.Unlock()
@@ -48,6 +50,7 @@ func (c *UnschedulableCache) Add(node, ownerID string) {
 	c.cache[ownerID] = freezeCache
 }
 
+// GetFreezeNodes return the freezed nodes
 func (c *UnschedulableCache) GetFreezeNodes(ownerID string) []string {
 	c.Lock()
 	defer c.Unlock()
@@ -62,6 +65,7 @@ func (c *UnschedulableCache) GetFreezeNodes(ownerID string) []string {
 	return nodes
 }
 
+// GetFreezeTime returns node/ownerID freeze time
 func (c *UnschedulableCache) GetFreezeTime(node, ownerID string) *time.Time {
 	c.RLock()
 	defer c.RUnlock()
@@ -76,6 +80,7 @@ func (c *UnschedulableCache) GetFreezeTime(node, ownerID string) *time.Time {
 	return timePtr.(*time.Time)
 }
 
+// CheckValidFunc defines the check func
 type CheckValidFunc func(string, string, time.Duration) bool
 
 // ReplacePodNodeNameNodeAffinity replaces the RequiredDuringSchedulingIgnoredDuringExecution
