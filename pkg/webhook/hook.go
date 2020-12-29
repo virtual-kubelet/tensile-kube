@@ -159,6 +159,8 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 				clone.Spec.Affinity, _ = util.ReplacePodNodeNameNodeAffinity(clone.Spec.Affinity, ref, 0, nil, nodes...)
 			}
 		}
+	default:
+		klog.Warningf("Skip operation: %v", req.Operation)
 	}
 
 	whsvr.trySetNodeName(clone, req.Namespace)

@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -60,13 +60,17 @@ type CommonController struct {
 
 // NewCommonController returns a new *CommonController
 func NewCommonController(client kubernetes.Interface,
-	configMapInformer coreinformers.ConfigMapInformer, secretInformer coreinformers.SecretInformer,
-	clientConfigMapInformer coreinformers.ConfigMapInformer, clientSecretInformer coreinformers.SecretInformer,
+	masterInformer, clientInformer informers.SharedInformerFactory,
 	configMapRateLimiter, secretRateLimiter workqueue.RateLimiter) Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: client.CoreV1().Events(v1.NamespaceAll)})
 	var eventRecorder record.EventRecorder
 	eventRecorder = broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "virtual-kubelet"})
+
+	configMapInformer := masterInformer.Core().V1().ConfigMaps()
+	secretInformer := masterInformer.Core().V1().Secrets()
+	clientConfigMapInformer := clientInformer.Core().V1().ConfigMaps()
+	clientSecretInformer := clientInformer.Core().V1().Secrets()
 	ctrl := &CommonController{
 		client:        client,
 		eventRecorder: eventRecorder,

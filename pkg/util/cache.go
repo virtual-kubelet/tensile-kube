@@ -143,30 +143,8 @@ func ReplacePodNodeNameNodeAffinity(affinity *v1.Affinity, ownerID string, expir
 		if term.MatchExpressions == nil {
 			continue
 		}
-		mes := make([]v1.NodeSelectorRequirement, 0)
-		for _, me := range term.MatchExpressions {
-			if me.Key == nodeSelReq.Key && me.Operator == nodeSelReq.Operator {
-				values := make([]string, 0)
-				for _, v := range me.Values {
-					klog.V(4).Infof("current term value %v", v)
-					if checkContains(nodeNames, v) {
-						continue
-					}
-					if checkFuc != nil {
-						if !checkFuc(v, ownerID, expireTime) && len(v) > 0 {
-							values = append(values, v)
-						}
-					} else {
-						values = append(values, v)
-					}
-				}
-				me.Values = append(values, nodeSelReq.Values...)
-				count = len(values)
-				mes = append(mes, me)
-				continue
-			}
-			mes = append(mes, me)
-		}
+		mes, noScheduleCount := getNodeSelectorRequirement(term, ownerID, nodeSelReq, checkFuc, expireTime)
+		count = noScheduleCount
 		term.MatchExpressions = mes
 		newTerms = append(newTerms, term)
 	}
@@ -175,6 +153,36 @@ func ReplacePodNodeNameNodeAffinity(affinity *v1.Affinity, ownerID string, expir
 	nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms = newTerms
 	affinity.NodeAffinity = nodeAffinity
 	return affinity, count
+}
+
+func getNodeSelectorRequirement(term v1.NodeSelectorTerm,
+	ownerID string, nodeSelReq v1.NodeSelectorRequirement, checkFuc CheckValidFunc, expireTime time.Duration) ([]v1.NodeSelectorRequirement, int) {
+	mes := make([]v1.NodeSelectorRequirement, 0)
+	count := 0
+	for _, me := range term.MatchExpressions {
+		if me.Key != nodeSelReq.Key || me.Operator != nodeSelReq.Operator {
+			mes = append(mes, me)
+			continue
+		}
+		values := make([]string, 0)
+		for _, v := range me.Values {
+			klog.V(4).Infof("current term value %v", v)
+			if checkContains(nodeSelReq.Values, v) {
+				continue
+			}
+			if checkFuc == nil {
+				values = append(values, v)
+				continue
+			}
+			if !checkFuc(v, ownerID, expireTime) && len(v) > 0 {
+				values = append(values, v)
+			}
+		}
+		me.Values = append(values, nodeSelReq.Values...)
+		count = len(values)
+		mes = append(mes, me)
+	}
+	return mes, count
 }
 
 func checkContains(exists []string, value string) bool {

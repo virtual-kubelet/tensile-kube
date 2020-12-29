@@ -273,15 +273,9 @@ func newCommonController() *commonTestBase {
 	clientInformer := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 	masterInformer := informers.NewSharedInformerFactory(master, controller.NoResyncPeriodFunc())
 
-	cmInformer := masterInformer.Core().V1().ConfigMaps()
-	secretInformer := masterInformer.Core().V1().Secrets()
-	clientConfigMapInformer := clientInformer.Core().V1().ConfigMaps()
-	clientSecretInformer := clientInformer.Core().V1().Secrets()
-
 	configMapRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
 	secretRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-	controller := NewCommonController(client, cmInformer, secretInformer, clientConfigMapInformer,
-		clientSecretInformer, configMapRateLimiter, secretRateLimiter)
+	controller := NewCommonController(client, masterInformer, clientInformer, configMapRateLimiter, secretRateLimiter)
 	c := controller.(*CommonController)
 	return &commonTestBase{
 		c:              c,
