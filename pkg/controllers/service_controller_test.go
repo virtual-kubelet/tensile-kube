@@ -41,14 +41,6 @@ type svcTestBase struct {
 }
 
 func TestServiceController_RunAddService(t *testing.T) {
-	b := newServiceController()
-
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
-	time.Sleep(100 * time.Millisecond)
 	service := newService()
 	service.Spec = v1.ServiceSpec{
 		Ports: []v1.ServicePort{
@@ -86,59 +78,49 @@ func TestServiceController_RunAddService(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		b.master.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
-			metav1.NewDeleteOptions(0))
-		b.client.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
-			metav1.NewDeleteOptions(0))
-		a := func() {
-			t.Logf("Running case :%v", c.name)
-			success := false
+		t.Run(c.name, func(t *testing.T) {
+			b := newServiceController()
+
+			stopCh := make(chan struct{})
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			go test(b.c, 1, stopCh)
+			b.master.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
+				metav1.NewDeleteOptions(0))
+			b.client.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
+				metav1.NewDeleteOptions(0))
 			if _, err := b.master.CoreV1().Services(c.service.Namespace).Create(c.service); err != nil {
 				t.Fatal(err)
 			}
-			cc, err := b.master.CoreV1().Services(c.service.Namespace).Get(c.service.Name,
+			_, err := b.master.CoreV1().Services(c.service.Namespace).Get(c.service.Name,
 				metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
-			b.masterInformer.Core().V1().Services().Informer().GetStore().Add(cc)
-			wait.Poll(50*time.Millisecond, 1*time.Second, func() (bool, error) {
-				serviceCopy, err := b.c.client.CoreV1().Services(c.service.Namespace).Get(c.service.Name,
+			err = wait.Poll(50*time.Millisecond, 10*time.Second, func() (bool, error) {
+				newSvc, err := b.c.client.CoreV1().Services(c.service.Namespace).Get(c.service.Name,
 					metav1.GetOptions{})
 				if err != nil {
-					t.Error(err)
 					return false, nil
 				}
-				if serviceCopy == nil {
-					t.Error("serviceCopy nil")
+				if newSvc == nil {
 					return false, nil
 				}
-				t.Logf("old ip: %v new ip: %v", c.service.Spec.ClusterIP, serviceCopy.Spec.ClusterIP)
-				if (serviceCopy.Spec.ClusterIP != c.service.Spec.ClusterIP) == c.ipChange {
-					success = true
+				t.Logf("old ip: %v new ip: %v", c.service.Spec.ClusterIP, newSvc.Spec.ClusterIP)
+				if (newSvc.Spec.ClusterIP != c.service.Spec.ClusterIP) == c.ipChange {
 					return true, nil
 				}
 				return false, nil
 			})
-			if !success {
-				t.Fatal("service add failed")
+			if err != nil {
+				t.Error("service add failed")
 			}
-		}
-		a()
+		})
 	}
 
-	close(stopCh)
 }
 
 func TestServiceController_RunAddEndPoints(t *testing.T) {
-	b := newServiceController()
-
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
-	time.Sleep(100 * time.Millisecond)
 	endpoints := newEndPoints()
 	endpoints.Subsets = []v1.EndpointSubset{
 		{
@@ -152,66 +134,62 @@ func TestServiceController_RunAddEndPoints(t *testing.T) {
 	endpointsCopy := endpoints.DeepCopy()
 	endpointsCopy1 := endpoints.DeepCopy()
 	endpointsCopy1.Annotations = map[string]string{}
-	var err error
 	cases := []struct {
 		name        string
 		endpoints   *v1.Endpoints
 		shouldAdded bool
 	}{
 		{
-			name:        "should add ",
+			name:        "should add",
 			endpoints:   endpointsCopy,
 			shouldAdded: true,
 		},
 		{
-			name:        "should not not",
+			name:        "should not sync, not global",
 			endpoints:   endpointsCopy1,
 			shouldAdded: false,
 		},
 	}
 
 	for _, c := range cases {
-		b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
-			metav1.NewDeleteOptions(0))
-		b.client.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
-			metav1.NewDeleteOptions(0))
-		a := func() {
-			t.Logf("Running case :%v", c.name)
-			success := false
+		t.Run(c.name, func(t *testing.T) {
+			b := newServiceController()
+
+			stopCh := make(chan struct{})
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			go test(b.c, 1, stopCh)
+			b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
+				metav1.NewDeleteOptions(0))
+			b.client.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
+				metav1.NewDeleteOptions(0))
 			if _, err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(c.endpoints); err != nil {
 				t.Fatal(err)
 			}
 
-			wait.Poll(50*time.Millisecond, 1*time.Second, func() (bool, error) {
-				endpointsCopy, err = b.c.clientEndpointsLister.Endpoints(c.endpoints.Namespace).Get(c.endpoints.Name)
+			err := wait.Poll(50*time.Millisecond, 5*time.Second, func() (bool, error) {
+				newEP, err := b.c.clientEndpointsLister.Endpoints(c.endpoints.Namespace).Get(c.endpoints.Name)
 				if err != nil {
-					return false, err
+					if errors.IsNotFound(err) && !c.shouldAdded {
+						t.Logf("Should sync endpoints %v: %v", c.endpoints.Name, c.shouldAdded)
+						return true, nil
+					}
+					return false, nil
 				}
-				if reflect.DeepEqual(endpointsCopy, c.endpoints) == c.shouldAdded {
-					t.Logf("endpoints update satisfied")
-					success = true
+				if reflect.DeepEqual(newEP, c.endpoints) == c.shouldAdded {
+					t.Log("endpoints update satisfied")
 					return true, nil
 				}
 				return false, nil
 			})
-			if !success {
-				t.Logf("endpoints update failed")
+			if err != nil {
+				t.Error("endpoints update failed")
 			}
-		}
-		a()
+		})
 	}
-
-	close(stopCh)
 }
 
 func TestServiceController_RunUpdateService(t *testing.T) {
-	b := newServiceController()
-
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	service := newService()
 	service.Spec = v1.ServiceSpec{
 		Ports: []v1.ServicePort{
@@ -232,10 +210,6 @@ func TestServiceController_RunUpdateService(t *testing.T) {
 	serviceCopy.Spec.Selector["test"] = "test1"
 	serviceCopy1 := serviceCopy.DeepCopy()
 	serviceCopy1.Annotations = map[string]string{}
-	var (
-		err error
-	)
-
 	cases := []struct {
 		name          string
 		service       *v1.Service
@@ -247,11 +221,6 @@ func TestServiceController_RunUpdateService(t *testing.T) {
 			shouldChanged: true,
 		},
 		{
-			name:          "should not update",
-			service:       serviceCopy1,
-			shouldChanged: false,
-		},
-		{
 			name:          "should not update, existing not global",
 			service:       serviceCopy1,
 			shouldChanged: false,
@@ -259,40 +228,36 @@ func TestServiceController_RunUpdateService(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Logf("Running case: %v", c.name)
-		success := false
-		if _, err = b.master.CoreV1().Services(c.service.Namespace).Update(c.service); err != nil {
-			t.Fatal(err)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			b := newServiceController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			if _, err := b.master.CoreV1().Services(c.service.Namespace).Update(c.service); err != nil {
+				t.Fatal(err)
+			}
 
-		wait.Poll(50*time.Millisecond, 1*time.Second, func() (bool, error) {
-			serviceCopy, err = b.c.clientServiceLister.Services(c.service.Namespace).Get(service.Name)
+			err := wait.Poll(50*time.Millisecond, 10*time.Second, func() (bool, error) {
+				newSvc, err := b.c.clientServiceLister.Services(c.service.Namespace).Get(service.Name)
+				if err != nil {
+					return false, nil
+				}
+				if reflect.DeepEqual(newSvc, newService()) != c.shouldChanged {
+					t.Log("service update satisfied")
+					return true, nil
+				}
+				return false, nil
+			})
 			if err != nil {
-				return false, err
+				t.Error("service update failed")
 			}
-			if reflect.DeepEqual(serviceCopy, newService()) == c.shouldChanged {
-				t.Logf("service update satisfied")
-				success = true
-				return true, nil
-			}
-			return false, nil
 		})
-		if !success {
-			t.Fatal("service update failed")
-		}
 	}
-
-	close(stopCh)
 }
 
 func TestServiceController_RunUpdateEndPoints(t *testing.T) {
-	b := newServiceController()
 
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	endpoints := newEndPoints()
 	endpoints.Subsets = []v1.EndpointSubset{
 		{
@@ -306,7 +271,6 @@ func TestServiceController_RunUpdateEndPoints(t *testing.T) {
 	endpointsCopy := endpoints.DeepCopy()
 	endpointsCopy1 := endpoints.DeepCopy()
 	endpointsCopy1.Annotations = map[string]string{}
-	var err error
 	cases := []struct {
 		name          string
 		endpoints     *v1.Endpoints
@@ -325,45 +289,40 @@ func TestServiceController_RunUpdateEndPoints(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		success := false
-		b.client.CoreV1().Endpoints(c.endpoints.Namespace).Update(newEndPoints())
-		if _, err = b.master.CoreV1().Endpoints(c.endpoints.Namespace).Update(c.endpoints); err != nil {
-			t.Fatal(err)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			b := newServiceController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			b.client.CoreV1().Endpoints(c.endpoints.Namespace).Update(newEndPoints())
+			if _, err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Update(c.endpoints); err != nil {
+				t.Fatal(err)
+			}
 
-		wait.Poll(50*time.Millisecond, 1*time.Second, func() (bool, error) {
-			endpointsCopy, err = b.c.clientEndpointsLister.Endpoints(c.endpoints.Namespace).Get(c.endpoints.Name)
+			err := wait.Poll(50*time.Millisecond, 10*time.Second, func() (bool, error) {
+				newEP, err := b.c.clientEndpointsLister.Endpoints(c.endpoints.Namespace).Get(c.endpoints.Name)
+				if err != nil {
+					return false, nil
+				}
+				if reflect.DeepEqual(newEP, newEndPoints()) != c.shouldChanged {
+					t.Log("endpoints update satisfied")
+					return true, nil
+				}
+				return false, nil
+			})
 			if err != nil {
-				return false, err
+				t.Error("endpoints update failed")
 			}
-			if !reflect.DeepEqual(endpointsCopy, newEndPoints()) == c.shouldChanged {
-				t.Logf("endpoints update satisfied")
-				success = true
-				return true, nil
-			}
-			return false, nil
 		})
-		if !success {
-			t.Fatal("endpoints update failed")
-		}
 	}
-
-	close(stopCh)
 }
 
 func TestServiceController_RunDeleteService(t *testing.T) {
-	b := newServiceController()
 
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	service := newService()
 	service1 := service.DeepCopy()
 	service1.Annotations = map[string]string{}
-	var err error
 	cases := []struct {
 		name    string
 		service *v1.Service
@@ -382,41 +341,37 @@ func TestServiceController_RunDeleteService(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		delete := false
-		err = b.master.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
-			&metav1.DeleteOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = b.c.clientServiceLister.Services(c.service.Namespace).Get(c.service.Name)
-		if err != nil {
-			if !errors.IsNotFound(err) {
+		t.Run(c.name, func(t *testing.T) {
+			b := newServiceController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			delete := false
+			err := b.master.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
+				&metav1.DeleteOptions{})
+			if err != nil {
 				t.Fatal(err)
 			}
-			delete = true
-		}
-		if delete == c.deleted {
-			t.Logf("configmap delete satisfied")
-		}
-		_, err = b.master.CoreV1().Services(c.service.Namespace).Create(c.service)
+			_, err = b.c.clientServiceLister.Services(c.service.Namespace).Get(c.service.Name)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					t.Fatal(err)
+				}
+				delete = true
+			}
+			if delete == c.deleted {
+				t.Log("configmap delete satisfied")
+			}
+			_, err = b.master.CoreV1().Services(c.service.Namespace).Create(c.service)
+		})
 	}
-	close(stopCh)
-
 }
 
 func TestServiceController_RunDeleteEndpoints(t *testing.T) {
-	b := newServiceController()
-
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	endpoints := newEndPoints()
 	endpoints1 := endpoints.DeepCopy()
 	endpoints1.Annotations = map[string]string{}
-	var err error
 	cases := []struct {
 		name      string
 		endpoints *v1.Endpoints
@@ -435,27 +390,31 @@ func TestServiceController_RunDeleteEndpoints(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		delete := false
-		err = b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
-			&metav1.DeleteOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = b.c.clientEndpointsLister.Endpoints(c.endpoints.Namespace).Get(c.endpoints.Name)
-		if err != nil {
-			if !errors.IsNotFound(err) {
+		t.Run(c.name, func(t *testing.T) {
+			b := newServiceController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			delete := false
+			err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
+				&metav1.DeleteOptions{})
+			if err != nil {
 				t.Fatal(err)
 			}
-			delete = true
-		}
-		if delete == c.deleted {
-			t.Logf("endpoints delete satisfied")
-		}
-		_, err = b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(c.endpoints)
+			_, err = b.c.clientEndpointsLister.Endpoints(c.endpoints.Namespace).Get(c.endpoints.Name)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					t.Fatal(err)
+				}
+				delete = true
+			}
+			if delete == c.deleted {
+				t.Log("endpoints delete satisfied")
+			}
+			_, err = b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(c.endpoints)
+		})
 	}
-	close(stopCh)
-
 }
 
 func newServiceController() *svcTestBase {

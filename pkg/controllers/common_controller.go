@@ -147,7 +147,7 @@ func (ctrl *CommonController) configMapAdd(obj interface{}) {
 func (ctrl *CommonController) configMapUpdated(old, new interface{}) {
 	newConfigMap := new.(*v1.ConfigMap)
 	oldConfigMap := old.(*v1.ConfigMap)
-	if ctrl.shouldEnqueueUpdateConfigMap(oldConfigMap, newConfigMap) {
+	if ctrl.shouldEnqueueUpdateConfigMap(oldConfigMap, newConfigMap) && IsObjectGlobal(&newConfigMap.ObjectMeta) {
 		key, err := cache.MetaNamespaceKeyFunc(new)
 		if err != nil {
 			runtime.HandleError(err)
@@ -196,7 +196,7 @@ func (ctrl *CommonController) secretAdd(obj interface{}) {
 func (ctrl *CommonController) secretUpdated(old, new interface{}) {
 	newSecret := new.(*v1.Secret)
 	oldSecret := old.(*v1.Secret)
-	if ctrl.shouldEnqueueUpdateSecret(oldSecret, newSecret) {
+	if ctrl.shouldEnqueueUpdateSecret(oldSecret, newSecret) && IsObjectGlobal(&newSecret.ObjectMeta) {
 		key, err := cache.MetaNamespaceKeyFunc(new)
 		if err != nil {
 			runtime.HandleError(err)

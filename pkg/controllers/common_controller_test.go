@@ -40,22 +40,11 @@ type commonTestBase struct {
 }
 
 func TestCommonController_RunUpdateConfigMap(t *testing.T) {
-	b := newCommonController()
-
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	configMap := newConfigMap()
 	configMap.Data = map[string]string{"test": "test1"}
 	configMapCopy := configMap.DeepCopy()
 	configMapCopy1 := configMap.DeepCopy()
 	configMapCopy1.Annotations = map[string]string{}
-	var (
-		err error
-	)
-
 	cases := []struct {
 		name          string
 		configMap     *v1.ConfigMap
@@ -72,48 +61,44 @@ func TestCommonController_RunUpdateConfigMap(t *testing.T) {
 			shouldChanged: false,
 		},
 	}
-
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		success := false
-		if _, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Update(c.configMap); err != nil {
-			t.Fatal(err)
-		}
-
-		wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
-			configMapCopy, err = b.c.clientConfigMapLister.ConfigMaps(c.configMap.Namespace).Get(configMap.Name)
+		t.Run(c.name, func(t *testing.T) {
+			b := newCommonController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			if _, err := b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Update(c.configMap); err != nil {
+				t.Fatal(err)
+			}
+			err := wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
+				cm, err := b.c.clientConfigMapLister.ConfigMaps(c.configMap.Namespace).Get(configMap.Name)
+				if err != nil {
+					return false, nil
+				}
+				old := newConfigMap()
+				t.Logf("New data: %v, old data: %v", cm.Data, old.Data)
+				if reflect.DeepEqual(cm.Data, old.Data) != c.shouldChanged {
+					t.Logf("New data: %v, old data: %v", cm.Data, old.Data)
+					t.Log("configMap update satisfied")
+					return true, nil
+				}
+				return false, nil
+			})
 			if err != nil {
-				return false, err
+				t.Error("configMap update failed")
 			}
-			if reflect.DeepEqual(configMapCopy, newConfigMap()) == c.shouldChanged {
-				t.Logf("configMap update satisfied")
-				success = true
-				return true, nil
-			}
-			return false, nil
 		})
-		if !success {
-			t.Fatal("configMap update failed")
-		}
 	}
-
-	close(stopCh)
 }
 
 func TestCommonController_RunUpdateSecret(t *testing.T) {
-	b := newCommonController()
 
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	secret := newSecret()
 	secret.StringData = map[string]string{"test": "test1"}
 	secretCopy := secret.DeepCopy()
 	secretCopy1 := secret.DeepCopy()
 	secretCopy1.Annotations = map[string]string{}
-	var err error
 	cases := []struct {
 		name          string
 		secret        *v1.Secret
@@ -130,42 +115,38 @@ func TestCommonController_RunUpdateSecret(t *testing.T) {
 			shouldChanged: false,
 		},
 	}
-
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		success := false
-		if _, err = b.master.CoreV1().Secrets(c.secret.Namespace).Update(c.secret); err != nil {
-			t.Fatal(err)
-		}
-
-		wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
-			secretCopy, err = b.c.clientSecretLister.Secrets(c.secret.Namespace).Get(c.secret.Name)
+		t.Run(c.name, func(t *testing.T) {
+			b := newCommonController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			if _, err := b.master.CoreV1().Secrets(c.secret.Namespace).Update(c.secret); err != nil {
+				t.Fatal(err)
+			}
+			err := wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
+				newSvc, err := b.c.clientSecretLister.Secrets(c.secret.Namespace).Get(c.secret.Name)
+				if err != nil {
+					return false, nil
+				}
+				oldSvc := newSecret()
+				t.Logf("New data: %v, old data: %v", newSvc.StringData, oldSvc.StringData)
+				if reflect.DeepEqual(newSvc.StringData, oldSvc.StringData) != c.shouldChanged {
+					t.Log("secret update satisfied")
+					return true, nil
+				}
+				return false, nil
+			})
 			if err != nil {
-				return false, err
+				t.Error("secret update failed")
 			}
-			if reflect.DeepEqual(secretCopy, newSecret()) == c.shouldChanged {
-				t.Logf("secret update satisfied")
-				success = true
-				return true, nil
-			}
-			return false, nil
 		})
-		if !success {
-			t.Fatal("secret update failed")
-		}
 	}
-
-	close(stopCh)
 }
 
 func TestCommonController_RunDeleteConfigMap(t *testing.T) {
-	b := newCommonController()
 
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	cm := newConfigMap()
 	cm.Data = map[string]string{"test": "test1"}
 	cm1 := cm.DeepCopy()
@@ -189,42 +170,38 @@ func TestCommonController_RunDeleteConfigMap(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		delete := false
-		err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Delete(c.configMap.Name,
-			&metav1.DeleteOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = b.c.clientConfigMapLister.ConfigMaps(c.configMap.Namespace).Get(c.configMap.Name)
-		if err != nil {
-			if !errors.IsNotFound(err) {
+		t.Run(c.name, func(t *testing.T) {
+			b := newCommonController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			delete := false
+			err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Delete(c.configMap.Name,
+				&metav1.DeleteOptions{})
+			if err != nil {
 				t.Fatal(err)
 			}
-			delete = true
-		}
-		if delete == c.deleted {
-			t.Logf("configmap delete satisfied")
-		}
-		_, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Create(c.configMap)
+			_, err = b.c.clientConfigMapLister.ConfigMaps(c.configMap.Namespace).Get(c.configMap.Name)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					t.Fatal(err)
+				}
+				delete = true
+			}
+			if delete == c.deleted {
+				t.Log("configmap delete satisfied")
+			}
+			_, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Create(c.configMap)
+		})
 	}
-	close(stopCh)
-
 }
 
 func TestCommonController_RunDeleteSecret(t *testing.T) {
-	b := newCommonController()
-
-	stopCh := make(chan struct{})
-
-	b.clientInformer.Start(stopCh)
-	b.masterInformer.Start(stopCh)
-	go test(b.c, 1, stopCh)
 	secret := newSecret()
 	secret.StringData = map[string]string{"test": "test1"}
 	secret1 := secret.DeepCopy()
 	secret1.Annotations = map[string]string{}
-	var err error
 	cases := []struct {
 		name    string
 		secret  *v1.Secret
@@ -243,27 +220,31 @@ func TestCommonController_RunDeleteSecret(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Logf("Running case :%v", c.name)
-		delete := false
-		err = b.master.CoreV1().Secrets(c.secret.Namespace).Delete(c.secret.Name,
-			&metav1.DeleteOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		_, err = b.c.clientSecretLister.Secrets(c.secret.Namespace).Get(c.secret.Name)
-		if err != nil {
-			if !errors.IsNotFound(err) {
+		t.Run(c.name, func(t *testing.T) {
+			b := newCommonController()
+			stopCh := make(chan struct{})
+			go test(b.c, 1, stopCh)
+			b.clientInformer.Start(stopCh)
+			b.masterInformer.Start(stopCh)
+			delete := false
+			err := b.master.CoreV1().Secrets(c.secret.Namespace).Delete(c.secret.Name,
+				&metav1.DeleteOptions{})
+			if err != nil {
 				t.Fatal(err)
 			}
-			delete = true
-		}
-		if delete == c.deleted {
-			t.Logf("secret delete satisfied")
-		}
-		_, err = b.master.CoreV1().Secrets(c.secret.Namespace).Create(c.secret)
+			_, err = b.c.clientSecretLister.Secrets(c.secret.Namespace).Get(c.secret.Name)
+			if err != nil {
+				if !errors.IsNotFound(err) {
+					t.Fatal(err)
+				}
+				delete = true
+			}
+			if delete == c.deleted {
+				t.Log("secret delete satisfied")
+			}
+			_, err = b.master.CoreV1().Secrets(c.secret.Namespace).Create(c.secret)
+		})
 	}
-	close(stopCh)
-
 }
 
 func newCommonController() *commonTestBase {

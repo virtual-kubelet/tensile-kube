@@ -144,11 +144,11 @@ func IsObjectGlobal(obj *metav1.ObjectMeta) bool {
 		return false
 	}
 
-	if obj.Annotations[util.GlobalLabel] != "true" {
-		return false
+	if obj.Annotations[util.GlobalLabel] == "true" {
+		return true
 	}
 
-	return true
+	return false
 }
 
 // SetObjectGlobal add global annotation to an object
