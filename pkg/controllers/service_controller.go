@@ -28,7 +28,7 @@ import (
 	mergetypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -62,14 +62,20 @@ type ServiceController struct {
 
 // NewServiceController returns a new *ServiceController
 func NewServiceController(master kubernetes.Interface, client kubernetes.Interface,
-	serviceInformer coreinformers.ServiceInformer, endpointsInformer coreinformers.EndpointsInformer,
-	clientServiceInformer coreinformers.ServiceInformer, clientEndpointsInformer coreinformers.EndpointsInformer,
-	nsLister corelisters.NamespaceLister,
-	serviceRateLimiter, endpointsRateLimiter workqueue.RateLimiter) Controller {
+	masterInformer, clientInformer informers.SharedInformerFactory,
+	nsLister corelisters.NamespaceLister) Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: master.CoreV1().Events(v1.NamespaceAll)})
 	var eventRecorder record.EventRecorder
 	eventRecorder = broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "virtual-kubelet"})
+	serviceRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
+	endpointsRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
+	// master
+	serviceInformer := masterInformer.Core().V1().Services()
+	endpointsInformer := masterInformer.Core().V1().Endpoints()
+	// client
+	clientServiceInformer := clientInformer.Core().V1().Services()
+	clientEndpointsInformer := clientInformer.Core().V1().Endpoints()
 	ctrl := &ServiceController{
 		master:         master,
 		client:         client,

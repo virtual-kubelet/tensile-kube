@@ -105,67 +105,31 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 			Allowed: false,
 		}
 	}
-	if err != nil {
-		return &v1beta1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	}
-	if req.Namespace == "kube-system" {
+	if shouldSkip(&pod) {
 		return &v1beta1.AdmissionResponse{
 			Allowed: true,
 		}
 	}
-	if pod.Labels != nil {
-		if pod.Labels[util.CreatedbyDescheduler] == "true" {
-			return &v1beta1.AdmissionResponse{
-				Allowed: true,
-			}
-		}
-		if !util.IsVirtualPod(&pod) {
-			return &v1beta1.AdmissionResponse{
-				Allowed: true,
-			}
-		}
-	}
-	ref := ""
-	if len(pod.OwnerReferences) > 0 {
-		ref = string(pod.OwnerReferences[0].UID)
-	}
+	ref := getOwnerRef(&pod)
 	clone := pod.DeepCopy()
 	switch req.Operation {
 	case v1beta1.Update:
-		node := ""
-		if len(ref) > 0 {
-			if pod.Annotations != nil {
-				node = pod.Annotations["unschedulable-node"]
-			}
-			if len(node) > 0 {
-				klog.Infof("Unschedulable nodes %+v ref %v to cache", node, ref)
-				freezeCache.Add(node, ref)
-			}
-		}
+		setUnschedulableNodes(ref, clone)
 		return &v1beta1.AdmissionResponse{
 			Allowed: true,
 		}
 	case v1beta1.Create:
-		klog.Infof("Create pod %v node %v, owner %v", clone.Name, clone.Spec.NodeName, ref)
-		if len(ref) > 0 && len(clone.Spec.NodeName) == 0 {
-			nodes := freezeCache.GetFreezeNodes(ref)
-			klog.Infof("Not in nodes %v for %v", nodes, ref)
-			if len(nodes) > 0 {
-				klog.Infof("Create pod %v Not nodes %+v", clone.Name, nodes)
-				clone.Spec.Affinity, _ = util.ReplacePodNodeNameNodeAffinity(clone.Spec.Affinity, ref, 0, nil, nodes...)
-			}
+		nodes := getUnschedulableNodes(ref, clone)
+		if len(nodes) > 0 {
+			klog.Infof("Create pod %v Not nodes %+v", clone.Name, nodes)
+			clone.Spec.Affinity, _ = util.ReplacePodNodeNameNodeAffinity(clone.Spec.Affinity, ref, 0, nil, nodes...)
 		}
 	default:
 		klog.Warningf("Skip operation: %v", req.Operation)
 	}
 
-	whsvr.trySetNodeName(clone, req.Namespace)
+	whsvr.trySetNodeName(clone)
 	inject(clone, whsvr.ignoreSelectorKeys)
-	klog.V(6).Infof("Final obj %+v", clone)
 	patch, err := util.CreateJSONPatch(pod, clone)
 	klog.Infof("Final patch %+v", string(patch))
 	var result metav1.Status
@@ -184,45 +148,16 @@ func (whsvr *webhookServer) mutate(ar *v1beta1.AdmissionReview) *v1beta1.Admissi
 
 // Serve method for webhook server
 func (whsvr *webhookServer) Serve(w http.ResponseWriter, r *http.Request) {
-	var body []byte
-	if r.Body != nil {
-		if data, err := ioutil.ReadAll(r.Body); err == nil {
-			body = data
-		}
-	}
-	klog.V(5).Infof("Receive request: %+v", *r)
-	if len(body) == 0 {
-		klog.Error("empty body")
-		http.Error(w, "empty body", http.StatusBadRequest)
+	admissionReview, err := getRequestReview(r)
+	if err != nil {
+		klog.Error(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	// verify the content type is accurate
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		klog.Errorf("Content-Type=%s, expect application/json", contentType)
-		http.Error(w, "invalid Content-Type, expect `application/json`", http.StatusUnsupportedMediaType)
-		return
-	}
-	var admissionResponse *v1beta1.AdmissionResponse
-	ar := v1beta1.AdmissionReview{}
-	if _, _, err := deserializer.Decode(body, nil, &ar); err != nil {
-		klog.Errorf("Can't decode body: %v", err)
-		admissionResponse = &v1beta1.AdmissionResponse{
-			Result: &metav1.Status{
-				Message: err.Error(),
-			},
-		}
-	} else {
-		if r.URL.Path == "/mutate" {
-			admissionResponse = whsvr.mutate(&ar)
-		}
-	}
-	admissionReview := v1beta1.AdmissionReview{}
+	admissionResponse := whsvr.mutate(admissionReview)
 	if admissionResponse != nil {
 		admissionReview.Response = admissionResponse
-		if ar.Request != nil {
-			admissionReview.Response.UID = ar.Request.UID
-		}
+		admissionReview.Response.UID = admissionReview.Request.UID
 	}
 	resp, err := json.Marshal(admissionReview)
 	if err != nil {
@@ -236,43 +171,47 @@ func (whsvr *webhookServer) Serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (whsvr *webhookServer) trySetNodeName(pod *corev1.Pod, ns string) {
+func (whsvr *webhookServer) trySetNodeName(pod *corev1.Pod) {
 	if pod.Spec.Volumes == nil {
 		return
 	}
 	nodeName := ""
 	for _, volume := range pod.Spec.Volumes {
-		if volume.PersistentVolumeClaim == nil {
+		pvcSource := volume.PersistentVolumeClaim
+		if pvcSource == nil {
 			continue
 		}
-		pvc, err := whsvr.pvcLister.PersistentVolumeClaims(ns).Get(volume.PersistentVolumeClaim.ClaimName)
-		if err != nil || pvc == nil {
-			continue
+		nodeName = whsvr.getNodeNameFromPVC(pod.Namespace, pvcSource.ClaimName)
+		if len(nodeName) != 0 {
+			pod.Spec.NodeName = nodeName
+			klog.Infof("Set desired node name to %v ", nodeName)
+			return
 		}
-		if pvc.Annotations == nil {
-			continue
-		}
-		if len(pvc.Annotations[util.SelectedNodeKey]) != 0 {
-			nodeName = pvc.Annotations[util.SelectedNodeKey]
-		}
-	}
-	if len(nodeName) != 0 {
-		pod.Spec.NodeName = nodeName
-		klog.Infof("Set desired node name to %v ", nodeName)
 	}
 	return
+}
+
+func (whsvr *webhookServer) getNodeNameFromPVC(ns, pvcName string) string {
+	var nodeName string
+	pvc, err := whsvr.pvcLister.PersistentVolumeClaims(ns).Get(pvcName)
+	if err != nil {
+		return nodeName
+	}
+	if pvc.Annotations == nil {
+		return nodeName
+	}
+	return pvc.Annotations[util.SelectedNodeKey]
 }
 
 func inject(pod *corev1.Pod, ignoreKeys []string) {
 	nodeSelector := make(map[string]string)
 	var affinity *corev1.Affinity
-	if len(pod.Spec.NodeSelector) == 0 &&
-		pod.Spec.Affinity == nil &&
-		pod.Spec.Tolerations == nil {
+
+	if skipInject(pod) {
 		return
 	}
 
-	if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
+	if pod.Spec.Affinity != nil {
 		affinity = injectAffinity(pod.Spec.Affinity, ignoreKeys)
 	}
 
@@ -289,10 +228,6 @@ func inject(pod *corev1.Pod, ignoreKeys []string) {
 	if err != nil {
 		return
 	}
-	if len(cnsByte) == 0 {
-		return
-	}
-
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
@@ -318,6 +253,10 @@ func getPodTolerations(pod *corev1.Pod) []corev1.Toleration {
 		}
 		tolerations = append(tolerations, toleration)
 	}
+	return addDefaultPodTolerations(tolerations, notReady, unSchedulable)
+}
+
+func addDefaultPodTolerations(tolerations []corev1.Toleration, notReady, unSchedulable bool) []corev1.Toleration {
 	if !notReady {
 		tolerations = append(tolerations, desiredMap[util.TaintNodeNotReady])
 	}
@@ -401,17 +340,17 @@ func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Af
 		}
 	}
 
-	filterdTerms := make([]corev1.NodeSelectorTerm, 0)
+	filteredTerms := make([]corev1.NodeSelectorTerm, 0)
 	for _, term := range required.NodeSelectorTerms {
 		if len(term.MatchFields) == 0 && len(term.MatchExpressions) == 0 {
 			continue
 		}
-		filterdTerms = append(filterdTerms, term)
+		filteredTerms = append(filteredTerms, term)
 	}
-	if len(filterdTerms) == 0 {
+	if len(filteredTerms) == 0 {
 		required = nil
 	} else {
-		required.NodeSelectorTerms = filterdTerms
+		required.NodeSelectorTerms = filteredTerms
 	}
 	affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution = required
 	if len(nodeSelectorTerm) == 0 {
@@ -420,4 +359,79 @@ func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Af
 	return &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{NodeSelectorTerms: nodeSelectorTerm},
 	}}
+}
+
+func shouldSkip(pod *corev1.Pod) bool {
+	if pod.Namespace == "kube-system" {
+		return true
+	}
+	if pod.Labels != nil {
+		if pod.Labels[util.CreatedbyDescheduler] == "true" {
+			return true
+		}
+		if !util.IsVirtualPod(pod) {
+			return true
+		}
+	}
+	return false
+}
+
+func skipInject(pod *corev1.Pod) bool {
+	return len(pod.Spec.NodeSelector) == 0 &&
+		pod.Spec.Affinity == nil &&
+		pod.Spec.Tolerations == nil
+}
+
+func getOwnerRef(pod *corev1.Pod) string {
+	ref := ""
+	if len(pod.OwnerReferences) > 0 {
+		ref = string(pod.OwnerReferences[0].UID)
+	}
+	return ref
+}
+
+func setUnschedulableNodes(ref string, pod *corev1.Pod) {
+	node := ""
+	if len(ref) == 0 {
+		return
+	}
+	if pod.Annotations != nil {
+		node = pod.Annotations["unschedulable-node"]
+	}
+	if len(node) > 0 {
+		klog.Infof("Unschedulable nodes %+v ref %v to cache", node, ref)
+		freezeCache.Add(node, ref)
+	}
+}
+
+func getUnschedulableNodes(ref string, pod *corev1.Pod) []string {
+	var nodes []string
+	if len(ref) == 0 {
+		return nodes
+	}
+	if len(pod.Spec.NodeName) != 0 {
+		return nodes
+	}
+	nodes = freezeCache.GetFreezeNodes(ref)
+	klog.Infof("Not in nodes %v for %v", nodes, ref)
+	return nodes
+}
+
+func getRequestReview(r *http.Request) (*v1beta1.AdmissionReview, error) {
+	if r.Body == nil {
+		return nil, fmt.Errorf("empty body")
+	}
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	klog.V(5).Infof("Receive request: %+v", *r)
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty body")
+	}
+	ar := v1beta1.AdmissionReview{}
+	if deserializer.Decode(body, nil, &ar); err != nil {
+		return nil, fmt.Errorf("Can't decode body: %v", err)
+	}
+	return &ar, nil
 }
