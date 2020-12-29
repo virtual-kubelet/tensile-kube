@@ -30,6 +30,7 @@ import (
 	"github.com/virtual-kubelet/tensile-kube/pkg/util"
 )
 
+// GetStatsSummary summaries the cluster metrics which represented by the provider
 func (v *VirtualK8S) GetStatsSummary(ctx context.Context) (*stats.Summary, error) {
 	var summary stats.Summary
 	selector := labels.SelectorFromSet(map[string]string{
