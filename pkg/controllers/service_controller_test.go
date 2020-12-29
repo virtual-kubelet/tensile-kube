@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/util/workqueue"
 	"k8s.io/kubernetes/pkg/controller"
 )
 
@@ -424,19 +423,8 @@ func newServiceController() *svcTestBase {
 	clientInformer := informers.NewSharedInformerFactory(client, controller.NoResyncPeriodFunc())
 	masterInformer := informers.NewSharedInformerFactory(master, controller.NoResyncPeriodFunc())
 
-	serviceInformer := masterInformer.Core().V1().Services()
-	endPointsInformer := masterInformer.Core().V1().Endpoints()
-
 	nsLister := masterInformer.Core().V1().Namespaces().Lister()
-
-	clientServiceInformer := clientInformer.Core().V1().Services()
-	clientEndPointsInformer := clientInformer.Core().V1().Endpoints()
-
-	serviceRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-	endPointsRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-
-	controller := NewServiceController(master, client, serviceInformer, endPointsInformer, clientServiceInformer,
-		clientEndPointsInformer, nsLister, serviceRateLimiter, endPointsRateLimiter)
+	controller := NewServiceController(master, client, masterInformer, clientInformer, nsLister)
 	c := controller.(*ServiceController)
 	return &svcTestBase{
 		c:              c,

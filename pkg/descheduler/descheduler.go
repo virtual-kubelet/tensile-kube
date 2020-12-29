@@ -99,7 +99,6 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 		podEvictor := evictions.NewPodEvictor(
 			rs.Client,
 			evictionPolicyGroupVersion,
-			rs.DryRun,
 			rs.MaxNoOfPodsToEvictPerNode,
 			nodes, unschedulableCache,
 		)

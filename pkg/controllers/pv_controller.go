@@ -27,7 +27,7 @@ import (
 	mergetypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
-	coreinformers "k8s.io/client-go/informers/core/v1"
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -67,13 +67,19 @@ type PVController struct {
 
 // NewPVController returns a new *PVController
 func NewPVController(master kubernetes.Interface, client kubernetes.Interface,
-	pvcInformer coreinformers.PersistentVolumeClaimInformer, pvInformer coreinformers.PersistentVolumeInformer,
-	clientPVCInformer coreinformers.PersistentVolumeClaimInformer, clientPVInformer coreinformers.PersistentVolumeInformer,
-	pvcRateLimiter, pvRateLimiter workqueue.RateLimiter, hostIP string) Controller {
+	masterInformer, clientInformer informers.SharedInformerFactory, hostIP string) Controller {
 	broadcaster := record.NewBroadcaster()
 	broadcaster.StartRecordingToSink(&corev1.EventSinkImpl{Interface: master.CoreV1().Events(v1.NamespaceAll)})
 	var eventRecorder record.EventRecorder
 	eventRecorder = broadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "virtual-kubelet"})
+	pvcInformer := masterInformer.Core().V1().PersistentVolumeClaims()
+	pvInformer := masterInformer.Core().V1().PersistentVolumes()
+
+	clientPVCInformer := clientInformer.Core().V1().PersistentVolumeClaims()
+	clientPVInformer := clientInformer.Core().V1().PersistentVolumes()
+
+	pvcRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
+	pvRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
 	ctrl := &PVController{
 		master:         master,
 		client:         client,

@@ -34,7 +34,6 @@ import (
 	"golang.org/x/time/rate"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
@@ -89,8 +88,7 @@ func main() {
 			cfg.ConfigPath = o.KubeConfigPath
 			provider, err := k8sprovider.NewVirtualK8S(cfg, &cc, ignoreLabels, enableServiceAccount, o)
 			if err == nil {
-				go RunController(ctx, provider.GetMaster(),
-					provider.GetClient(), provider.GetNameSpaceLister(), cfg.NodeName, numberOfWorkers)
+				go RunController(ctx, provider, cfg.NodeName, numberOfWorkers)
 			}
 			return provider, err
 		}),
@@ -114,10 +112,10 @@ func main() {
 }
 
 // RunController starts controllers for objects needed to be synced
-func RunController(ctx context.Context, master,
-	client kubernetes.Interface, nsLister corelisters.NamespaceLister, hostIP string,
+func RunController(ctx context.Context, p *k8sprovider.VirtualK8S, hostIP string,
 	workers int) *controllers.ServiceController {
-
+	master := p.GetMaster()
+	client := p.GetClient()
 	masterInformer := kubeinformers.NewSharedInformerFactory(master, 0)
 	if masterInformer == nil {
 		return nil
@@ -136,10 +134,10 @@ func RunController(ctx context.Context, master,
 		}
 		switch c {
 		case "PVControllers":
-			pvCtrl := buildPVController(master, client, masterInformer, clientInformer, hostIP)
+			pvCtrl := controllers.NewPVController(master, client, masterInformer, clientInformer, hostIP)
 			runningControllers = append(runningControllers, pvCtrl)
 		case "ServiceControllers":
-			serviceCtrl := buildServiceController(master, client, masterInformer, clientInformer, nsLister)
+			serviceCtrl := controllers.NewServiceController(master, client, masterInformer, clientInformer, p.GetNameSpaceLister())
 			runningControllers = append(runningControllers, serviceCtrl)
 		default:
 			klog.Warningf("Skip: %v", c)
@@ -152,39 +150,6 @@ func RunController(ctx context.Context, master,
 	}
 	<-ctx.Done()
 	return nil
-}
-
-func buildServiceController(master, client kubernetes.Interface, masterInformer,
-	clientInformer kubeinformers.SharedInformerFactory,
-	nsLister corelisters.NamespaceLister) controllers.Controller {
-	// master
-	serviceInformer := masterInformer.Core().V1().Services()
-	endpointsInformer := masterInformer.Core().V1().Endpoints()
-	// client
-	clientServiceInformer := clientInformer.Core().V1().Services()
-	clientEndpointsInformer := clientInformer.Core().V1().Endpoints()
-
-	serviceRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-	endpointsRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-	return controllers.NewServiceController(master, client, serviceInformer, endpointsInformer,
-		clientServiceInformer, clientEndpointsInformer, nsLister, serviceRateLimiter, endpointsRateLimiter)
-}
-
-func buildPVController(master, client kubernetes.Interface, masterInformer,
-	clientInformer kubeinformers.SharedInformerFactory, hostIP string) controllers.Controller {
-
-	pvcInformer := masterInformer.Core().V1().PersistentVolumeClaims()
-	pvInformer := masterInformer.Core().V1().PersistentVolumes()
-
-	clientPVCInformer := clientInformer.Core().V1().PersistentVolumeClaims()
-	clientPVInformer := clientInformer.Core().V1().PersistentVolumes()
-
-	pvcRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-	pvRateLimiter := workqueue.NewItemExponentialFailureRateLimiter(time.Second, 30*time.Second)
-
-	return controllers.NewPVController(master, client, pvcInformer, pvInformer,
-		clientPVCInformer,
-		clientPVInformer, pvcRateLimiter, pvRateLimiter, hostIP)
 }
 
 func buildCommonControllers(client kubernetes.Interface, masterInformer,

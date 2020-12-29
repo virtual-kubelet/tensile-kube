@@ -66,7 +66,6 @@ type PodEvictor struct {
 func NewPodEvictor(
 	client clientset.Interface,
 	policyGroupVersion string,
-	dryRun bool,
 	maxPodsToEvict int,
 	nodes []*v1.Node, unschedulableCache *util.UnschedulableCache) *PodEvictor {
 	var nodePodCount = make(nodePodEvictedCount)
@@ -90,7 +89,7 @@ func NewPodEvictor(
 	return &PodEvictor{
 		client:             client,
 		policyGroupVersion: policyGroupVersion,
-		dryRun:             dryRun,
+		dryRun:             false,
 		maxPodsToEvict:     maxPodsToEvict,
 		nodepodCount:       nodePodCount,
 		nodeNum:            virtualCount,
