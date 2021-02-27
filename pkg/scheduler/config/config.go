@@ -28,9 +28,9 @@ import (
 	"k8s.io/klog"
 	kubeschedulerconfigv1alpha1 "k8s.io/kube-scheduler/config/v1alpha1"
 	schedulerappconfig "k8s.io/kubernetes/cmd/kube-scheduler/app/config"
+	"k8s.io/kubernetes/pkg/scheduler"
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	kubeschedulerscheme "k8s.io/kubernetes/pkg/scheduler/apis/config/scheme"
-	"k8s.io/kubernetes/pkg/scheduler/factory"
 )
 
 // Config return a scheduler config object
@@ -45,7 +45,7 @@ func Config(c schedulerappconfig.Config, master string) (*schedulerappconfig.Con
 
 	c.Client = client
 	c.InformerFactory = informers.NewSharedInformerFactory(client, 0)
-	c.PodInformer = factory.NewPodInformer(client, 0)
+	c.PodInformer = scheduler.NewPodInformer(client, 0)
 	c.EventClient = eventClient.EventsV1beta1()
 	c.CoreEventClient = eventClient.CoreV1()
 

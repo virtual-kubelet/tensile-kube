@@ -81,7 +81,9 @@ func main() {
 	o.Provider = providerName
 	o.PodSyncWorkers = numberOfWorkers
 	o.Version = strings.Join([]string{k8sVersion, providerName, buildVersion}, "-")
-	o.RateLimiter = rateLimiter()
+	o.SyncPodsFromKubernetesRateLimiter = rateLimiter()
+	o.DeletePodsFromKubernetesRateLimiter = rateLimiter()
+	o.SyncPodStatusFromProviderRateLimiter = rateLimiter()
 	node, err := cli.New(ctx,
 		cli.WithBaseOpts(o),
 		cli.WithProvider(providerName, func(cfg provider.InitConfig) (provider.Provider, error) {

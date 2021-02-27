@@ -17,6 +17,7 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -224,6 +225,7 @@ func (ctrl *ServiceController) syncService() {
 		}
 		ctrl.serviceQueue.Forget(key)
 	}()
+	ctx := context.TODO()
 	var service *v1.Service
 	service, err = ctrl.serviceLister.Services(namespace).Get(serviceName)
 	if err != nil {
@@ -231,14 +233,14 @@ func (ctrl *ServiceController) syncService() {
 			err = fmt.Errorf("get service from master cluster failed, error: %v", err)
 			return
 		}
-		service, err = ctrl.master.CoreV1().Services(namespace).Get(serviceName, metav1.GetOptions{})
+		service, err = ctrl.master.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
 		if err != nil {
 			if !apierrs.IsNotFound(err) {
 				err = fmt.Errorf("get service from master cluster failed, error: %v", err)
 				return
 			}
-			if err = ctrl.client.CoreV1().Services(namespace).Delete(serviceName,
-				&metav1.DeleteOptions{}); err != nil {
+			if err = ctrl.client.CoreV1().Services(namespace).Delete(ctx, serviceName,
+				metav1.DeleteOptions{}); err != nil {
 				if !apierrs.IsNotFound(err) {
 					klog.Errorf("Delete service in client cluster failed, error: %v", err)
 					return
@@ -251,8 +253,8 @@ func (ctrl *ServiceController) syncService() {
 	}
 
 	if service.DeletionTimestamp != nil {
-		if err = ctrl.client.CoreV1().Services(namespace).Delete(serviceName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.client.CoreV1().Services(namespace).Delete(ctx, serviceName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete service in client cluster failed, error: %v", err)
 				return
@@ -287,7 +289,7 @@ func (ctrl *ServiceController) syncEndpoints() {
 		klog.Errorf("Create role in client cluster failed, error: %v", err)
 		return
 	}
-
+	ctx := context.TODO()
 	defer func() {
 		if err != nil {
 			klog.Error(err)
@@ -304,13 +306,13 @@ func (ctrl *ServiceController) syncEndpoints() {
 			err = fmt.Errorf("get endpoints from master cluster failed, error: %v", err)
 			return
 		}
-		endpoints, err = ctrl.master.CoreV1().Endpoints(namespace).Get(endpointsName, metav1.GetOptions{})
+		endpoints, err = ctrl.master.CoreV1().Endpoints(namespace).Get(ctx, endpointsName, metav1.GetOptions{})
 		if err != nil {
 			if !apierrs.IsNotFound(err) {
 				return
 			}
-			if err = ctrl.client.CoreV1().Endpoints(namespace).Delete(endpointsName,
-				&metav1.DeleteOptions{}); err != nil {
+			if err = ctrl.client.CoreV1().Endpoints(namespace).Delete(ctx, endpointsName,
+				metav1.DeleteOptions{}); err != nil {
 				if !apierrs.IsNotFound(err) {
 					klog.Errorf("Delete endpoint in client cluster failed, error: %v", err)
 					return
@@ -324,8 +326,8 @@ func (ctrl *ServiceController) syncEndpoints() {
 	}
 
 	if endpoints.DeletionTimestamp != nil {
-		if err = ctrl.client.CoreV1().Endpoints(namespace).Delete(endpointsName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.client.CoreV1().Endpoints(namespace).Delete(ctx, endpointsName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete service in client cluster failed, error: %v", err)
 				return
@@ -362,7 +364,8 @@ func (ctrl *ServiceController) syncServiceHandler(service *v1.Service) {
 		if err = filterService(serviceInSub); err != nil {
 			return
 		}
-		serviceInSub, err = ctrl.client.CoreV1().Services(service.Namespace).Create(serviceInSub)
+		serviceInSub, err = ctrl.client.CoreV1().Services(service.Namespace).Create(context.TODO(),
+			serviceInSub, metav1.CreateOptions{})
 		if err != nil || serviceInSub == nil {
 			err = fmt.Errorf("Create service %v in client cluster failed, error: %v", key, err)
 			return
@@ -406,7 +409,8 @@ func (ctrl *ServiceController) syncEndpointsHandler(endpoints *v1.Endpoints) {
 		}
 		endpointsInSub = endpoints.DeepCopy()
 		filterCommon(&endpointsInSub.ObjectMeta)
-		endpointsInSub, err = ctrl.client.CoreV1().Endpoints(endpoints.Namespace).Create(endpointsInSub)
+		endpointsInSub, err = ctrl.client.CoreV1().Endpoints(endpoints.Namespace).Create(context.TODO(),
+			endpointsInSub, metav1.CreateOptions{})
 		if err != nil || endpointsInSub == nil {
 			err = fmt.Errorf("Create endpoints in client cluster failed, error: %v", err)
 			return
@@ -438,8 +442,8 @@ func (ctrl *ServiceController) patchService(service, clone *v1.Service) (*v1.Ser
 	if err != nil {
 		return service, err
 	}
-	newService, err := ctrl.client.CoreV1().Services(service.Namespace).Patch(service.Name,
-		mergetypes.MergePatchType, patch)
+	newService, err := ctrl.client.CoreV1().Services(service.Namespace).Patch(context.TODO(), service.Name,
+		mergetypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		return service, err
 	}
@@ -457,9 +461,8 @@ func (ctrl *ServiceController) patchEndpoints(endpoints, clone *v1.Endpoints) (*
 	if err != nil {
 		return endpoints, err
 	}
-	newEndpoints, err := ctrl.client.CoreV1().Endpoints(endpoints.Namespace).Patch(endpoints.Name,
-		mergetypes.MergePatchType,
-		patch)
+	newEndpoints, err := ctrl.client.CoreV1().Endpoints(endpoints.Namespace).Patch(context.TODO(),
+		endpoints.Name, mergetypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		return endpoints, err
 	}
@@ -482,6 +485,7 @@ func (ctrl *ServiceController) gc() {
 		klog.Error(err)
 		return
 	}
+	ctx := context.TODO()
 	for _, service := range serviceList {
 		if service == nil {
 			continue
@@ -494,7 +498,8 @@ func (ctrl *ServiceController) gc() {
 		}
 		_, err = ctrl.serviceLister.Services(service.Namespace).Get(service.Name)
 		if err != nil && apierrs.IsNotFound(err) {
-			err := ctrl.client.CoreV1().Services(service.Namespace).Delete(service.Name, &metav1.DeleteOptions{})
+			err := ctrl.client.CoreV1().Services(service.Namespace).Delete(ctx,
+				service.Name, metav1.DeleteOptions{})
 			if err != nil && !apierrs.IsNotFound(err) {
 				klog.Error(err)
 			}

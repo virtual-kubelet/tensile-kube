@@ -17,6 +17,7 @@
 package controllers
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -40,6 +41,7 @@ type svcTestBase struct {
 }
 
 func TestServiceController_RunAddService(t *testing.T) {
+	ctx := context.TODO()
 	service := newService()
 	service.Spec = v1.ServiceSpec{
 		Ports: []v1.ServicePort{
@@ -84,21 +86,22 @@ func TestServiceController_RunAddService(t *testing.T) {
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
 			go test(b.c, 1, stopCh)
-			b.master.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
-				metav1.NewDeleteOptions(0))
-			b.client.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
-				metav1.NewDeleteOptions(0))
-			if _, err := b.master.CoreV1().Services(c.service.Namespace).Create(c.service); err != nil {
+			b.master.CoreV1().Services(c.service.Namespace).Delete(ctx, c.service.Name,
+				*metav1.NewDeleteOptions(0))
+			b.client.CoreV1().Services(c.service.Namespace).Delete(ctx, c.service.Name,
+				*metav1.NewDeleteOptions(0))
+			if _, err := b.master.CoreV1().Services(c.service.Namespace).Create(ctx,
+				c.service, metav1.CreateOptions{}); err != nil {
 				t.Fatal(err)
 			}
-			_, err := b.master.CoreV1().Services(c.service.Namespace).Get(c.service.Name,
+			_, err := b.master.CoreV1().Services(c.service.Namespace).Get(ctx, c.service.Name,
 				metav1.GetOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			err = wait.Poll(50*time.Millisecond, 10*time.Second, func() (bool, error) {
-				newSvc, err := b.c.client.CoreV1().Services(c.service.Namespace).Get(c.service.Name,
-					metav1.GetOptions{})
+				newSvc, err := b.c.client.CoreV1().Services(c.service.Namespace).Get(ctx,
+					c.service.Name, metav1.GetOptions{})
 				if err != nil {
 					return false, nil
 				}
@@ -121,6 +124,7 @@ func TestServiceController_RunAddService(t *testing.T) {
 
 func TestServiceController_RunAddEndPoints(t *testing.T) {
 	endpoints := newEndPoints()
+	ctx := context.TODO()
 	endpoints.Subsets = []v1.EndpointSubset{
 		{
 			Addresses: []v1.EndpointAddress{
@@ -158,11 +162,12 @@ func TestServiceController_RunAddEndPoints(t *testing.T) {
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
 			go test(b.c, 1, stopCh)
-			b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
-				metav1.NewDeleteOptions(0))
-			b.client.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
-				metav1.NewDeleteOptions(0))
-			if _, err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(c.endpoints); err != nil {
+			b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(ctx, c.endpoints.Name,
+				*metav1.NewDeleteOptions(0))
+			b.client.CoreV1().Endpoints(c.endpoints.Namespace).Delete(ctx, c.endpoints.Name,
+				*metav1.NewDeleteOptions(0))
+			if _, err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(ctx,
+				c.endpoints, metav1.CreateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -225,7 +230,7 @@ func TestServiceController_RunUpdateService(t *testing.T) {
 			shouldChanged: false,
 		},
 	}
-
+	ctx := context.TODO()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			b := newServiceController()
@@ -233,7 +238,8 @@ func TestServiceController_RunUpdateService(t *testing.T) {
 			go test(b.c, 1, stopCh)
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
-			if _, err := b.master.CoreV1().Services(c.service.Namespace).Update(c.service); err != nil {
+			if _, err := b.master.CoreV1().Services(c.service.Namespace).Update(ctx,
+				c.service, metav1.UpdateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -286,7 +292,7 @@ func TestServiceController_RunUpdateEndPoints(t *testing.T) {
 			shouldChanged: false,
 		},
 	}
-
+	ctx := context.TODO()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			b := newServiceController()
@@ -294,8 +300,10 @@ func TestServiceController_RunUpdateEndPoints(t *testing.T) {
 			go test(b.c, 1, stopCh)
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
-			b.client.CoreV1().Endpoints(c.endpoints.Namespace).Update(newEndPoints())
-			if _, err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Update(c.endpoints); err != nil {
+			b.client.CoreV1().Endpoints(c.endpoints.Namespace).Update(ctx,
+				newEndPoints(), metav1.UpdateOptions{})
+			if _, err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Update(ctx,
+				c.endpoints, metav1.UpdateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -318,7 +326,7 @@ func TestServiceController_RunUpdateEndPoints(t *testing.T) {
 }
 
 func TestServiceController_RunDeleteService(t *testing.T) {
-
+	ctx := context.TODO()
 	service := newService()
 	service1 := service.DeepCopy()
 	service1.Annotations = map[string]string{}
@@ -347,8 +355,8 @@ func TestServiceController_RunDeleteService(t *testing.T) {
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
 			delete := false
-			err := b.master.CoreV1().Services(c.service.Namespace).Delete(c.service.Name,
-				&metav1.DeleteOptions{})
+			err := b.master.CoreV1().Services(c.service.Namespace).Delete(ctx,
+				c.service.Name, metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -362,7 +370,7 @@ func TestServiceController_RunDeleteService(t *testing.T) {
 			if delete == c.deleted {
 				t.Log("configmap delete satisfied")
 			}
-			_, err = b.master.CoreV1().Services(c.service.Namespace).Create(c.service)
+			_, err = b.master.CoreV1().Services(c.service.Namespace).Create(ctx, c.service, metav1.CreateOptions{})
 		})
 	}
 }
@@ -387,7 +395,7 @@ func TestServiceController_RunDeleteEndpoints(t *testing.T) {
 			deleted:   true,
 		},
 	}
-
+	ctx := context.TODO()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			b := newServiceController()
@@ -396,8 +404,8 @@ func TestServiceController_RunDeleteEndpoints(t *testing.T) {
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
 			delete := false
-			err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(c.endpoints.Name,
-				&metav1.DeleteOptions{})
+			err := b.master.CoreV1().Endpoints(c.endpoints.Namespace).Delete(ctx,
+				c.endpoints.Name, metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -411,7 +419,8 @@ func TestServiceController_RunDeleteEndpoints(t *testing.T) {
 			if delete == c.deleted {
 				t.Log("endpoints delete satisfied")
 			}
-			_, err = b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(c.endpoints)
+			_, err = b.master.CoreV1().Endpoints(c.endpoints.Namespace).Create(ctx,
+				c.endpoints, metav1.CreateOptions{})
 		})
 	}
 }

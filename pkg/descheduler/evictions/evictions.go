@@ -159,14 +159,14 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	if err != nil {
 		return false, err
 	}
-	_, err = pe.client.CoreV1().Pods(pod.Namespace).Patch(copy.Name,
-		mergetypes.MergePatchType, patch)
+	_, err = pe.client.CoreV1().Pods(pod.Namespace).Patch(ctx, copy.Name,
+		mergetypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil && !apierrors.IsNotFound(err) {
 		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
 		return false, err
 	}
 
-	err = pe.client.CoreV1().Pods(podCopy.Namespace).Delete(podCopy.Name, deleteOptions)
+	err = pe.client.CoreV1().Pods(podCopy.Namespace).Delete(ctx, podCopy.Name, *deleteOptions)
 	if err != nil && !apierrors.IsNotFound(err) {
 		// err is used only for logging purposes
 		klog.Errorf("Error evicting pod: %#v in namespace %#v (%#v)", pod.Name, pod.Namespace, err)
@@ -175,7 +175,7 @@ func (pe *PodEvictor) EvictPod(ctx context.Context, pod *v1.Pod, node *v1.Node) 
 	}
 	addDescheduleCount(podCopy)
 
-	_, err = pe.client.CoreV1().Pods(podCopy.Namespace).Create(podCopy)
+	_, err = pe.client.CoreV1().Pods(podCopy.Namespace).Create(ctx, podCopy, metav1.CreateOptions{})
 	klog.V(4).Infof("New pod %+v", podCopy)
 
 	if err != nil && !apierrors.IsAlreadyExists(err) {
@@ -329,7 +329,7 @@ func evictPod(ctx context.Context, client clientset.Interface, pod *v1.Pod, poli
 		},
 		DeleteOptions: deleteOptions,
 	}
-	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(eviction)
+	err := client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(ctx, eviction)
 
 	if err == nil {
 		return nil

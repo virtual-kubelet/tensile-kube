@@ -84,7 +84,7 @@ func RunDeschedulerStrategies(ctx context.Context, rs *options.DeschedulerServer
 	count := 0
 	wait.Until(func() {
 		count++
-		nodes, err := nodeutil.ReadyNodes(rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
+		nodes, err := nodeutil.ReadyNodes(ctx, rs.Client, nodeInformer, rs.NodeSelector, stopChannel)
 		if err != nil {
 			klog.V(1).Infof("Unable to get ready nodes: %v", err)
 			close(stopChannel)

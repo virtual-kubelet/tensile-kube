@@ -17,6 +17,7 @@
 package controllers
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -68,7 +69,8 @@ func TestCommonController_RunUpdateConfigMap(t *testing.T) {
 			go test(b.c, 1, stopCh)
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
-			if _, err := b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Update(c.configMap); err != nil {
+			if _, err := b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Update(
+				context.TODO(), c.configMap, metav1.UpdateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			err := wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
@@ -122,7 +124,8 @@ func TestCommonController_RunUpdateSecret(t *testing.T) {
 			go test(b.c, 1, stopCh)
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
-			if _, err := b.master.CoreV1().Secrets(c.secret.Namespace).Update(c.secret); err != nil {
+			if _, err := b.master.CoreV1().Secrets(c.secret.Namespace).Update(context.TODO(),
+				c.secret, metav1.UpdateOptions{}); err != nil {
 				t.Fatal(err)
 			}
 			err := wait.Poll(10*time.Millisecond, 10*time.Second, func() (bool, error) {
@@ -146,7 +149,7 @@ func TestCommonController_RunUpdateSecret(t *testing.T) {
 }
 
 func TestCommonController_RunDeleteConfigMap(t *testing.T) {
-
+	ctx := context.TODO()
 	cm := newConfigMap()
 	cm.Data = map[string]string{"test": "test1"}
 	cm1 := cm.DeepCopy()
@@ -177,8 +180,8 @@ func TestCommonController_RunDeleteConfigMap(t *testing.T) {
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
 			delete := false
-			err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Delete(c.configMap.Name,
-				&metav1.DeleteOptions{})
+			err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Delete(ctx,
+				c.configMap.Name, metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -192,12 +195,13 @@ func TestCommonController_RunDeleteConfigMap(t *testing.T) {
 			if delete == c.deleted {
 				t.Log("configmap delete satisfied")
 			}
-			_, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Create(c.configMap)
+			_, err = b.master.CoreV1().ConfigMaps(c.configMap.Namespace).Create(ctx, c.configMap, metav1.CreateOptions{})
 		})
 	}
 }
 
 func TestCommonController_RunDeleteSecret(t *testing.T) {
+	ctx := context.TODO()
 	secret := newSecret()
 	secret.StringData = map[string]string{"test": "test1"}
 	secret1 := secret.DeepCopy()
@@ -218,7 +222,6 @@ func TestCommonController_RunDeleteSecret(t *testing.T) {
 			deleted: true,
 		},
 	}
-
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			b := newCommonController()
@@ -227,8 +230,8 @@ func TestCommonController_RunDeleteSecret(t *testing.T) {
 			b.clientInformer.Start(stopCh)
 			b.masterInformer.Start(stopCh)
 			delete := false
-			err := b.master.CoreV1().Secrets(c.secret.Namespace).Delete(c.secret.Name,
-				&metav1.DeleteOptions{})
+			err := b.master.CoreV1().Secrets(c.secret.Namespace).Delete(ctx, c.secret.Name,
+				metav1.DeleteOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -242,7 +245,8 @@ func TestCommonController_RunDeleteSecret(t *testing.T) {
 			if delete == c.deleted {
 				t.Log("secret delete satisfied")
 			}
-			_, err = b.master.CoreV1().Secrets(c.secret.Namespace).Create(c.secret)
+			_, err = b.master.CoreV1().Secrets(c.secret.Namespace).Create(ctx,
+				c.secret, metav1.CreateOptions{})
 		})
 	}
 }

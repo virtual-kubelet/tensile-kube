@@ -17,6 +17,7 @@
 package pod
 
 import (
+	"context"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -59,7 +60,7 @@ func ListPodsOnANode(client clientset.Interface, node *v1.Node) ([]*v1.Pod, erro
 		return []*v1.Pod{}, err
 	}
 
-	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(
+	podList, err := client.CoreV1().Pods(v1.NamespaceAll).List(context.TODO(),
 		metav1.ListOptions{FieldSelector: fieldSelector.String()})
 	if err != nil {
 		return []*v1.Pod{}, err

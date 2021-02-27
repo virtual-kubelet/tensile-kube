@@ -17,6 +17,7 @@
 package controllers
 
 import (
+	"context"
 	"encoding/json"
 
 	v1 "k8s.io/api/core/v1"
@@ -36,9 +37,8 @@ func ensureNamespace(ns string, client kubernetes.Interface, nsLister corelister
 	if !apierrs.IsNotFound(err) {
 		return err
 	}
-	if _, err = client.CoreV1().Namespaces().Create(&v1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{Name: ns},
-	}); err != nil {
+	if _, err = client.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: ns}}, metav1.CreateOptions{}); err != nil {
 		if !apierrs.IsAlreadyExists(err) {
 			return err
 		}
