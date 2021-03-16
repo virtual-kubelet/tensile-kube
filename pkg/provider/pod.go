@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	mergetypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
@@ -61,8 +60,8 @@ func (v *VirtualK8S) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 				Name: pod.Namespace,
 			},
 		}
-		if _, createErr := v.client.CoreV1().Namespaces().Create(ns); createErr != nil && errors.IsAlreadyExists(
-			createErr) {
+		if _, createErr := v.client.CoreV1().Namespaces().Create(ctx, ns,
+			metav1.CreateOptions{}); createErr != nil && errors.IsAlreadyExists(createErr) {
 			klog.Infof("Namespace %s create failed error: %v", pod.Namespace, createErr)
 			return err
 		}
@@ -99,7 +98,7 @@ func (v *VirtualK8S) CreatePod(ctx context.Context, pod *corev1.Pod) error {
 		return fmt.Errorf("create secrets failed: %v", err)
 	}
 	klog.V(6).Infof("Creating pod %+v", pod)
-	_, err = v.client.CoreV1().Pods(pod.Namespace).Create(basicPod)
+	_, err = v.client.CoreV1().Pods(pod.Namespace).Create(ctx, basicPod, metav1.CreateOptions{})
 	if err != nil {
 		return fmt.Errorf("could not create pod: %v", err)
 	}
@@ -129,7 +128,7 @@ func (v *VirtualK8S) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		reflect.DeepEqual(currentPod.Labels, podCopy.Labels) {
 		return nil
 	}
-	_, err = v.client.CoreV1().Pods(pod.Namespace).Update(podCopy)
+	_, err = v.client.CoreV1().Pods(pod.Namespace).Update(ctx, podCopy, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("could not update pod: %v", err)
 	}
@@ -156,7 +155,7 @@ func (v *VirtualK8S) DeletePod(ctx context.Context, pod *corev1.Pod) error {
 		opts.GracePeriodSeconds = pod.DeletionGracePeriodSeconds
 	}
 
-	err := v.client.CoreV1().Pods(pod.Namespace).Delete(pod.Name, opts)
+	err := v.client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, *opts)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("Tried to delete pod %s/%s, but it did not exist in the cluster", pod.Namespace, pod.Name)
@@ -252,7 +251,7 @@ func (v *VirtualK8S) GetContainerLogs(ctx context.Context, namespace string,
 		options.Follow = opts.Follow
 	}
 	logs := v.client.CoreV1().Pods(namespace).GetLogs(podName, options)
-	stream, err := logs.Stream()
+	stream, err := logs.Stream(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not get stream from logs request: %v", err)
 	}
@@ -354,13 +353,13 @@ func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns str
 		util.TrimObjectMeta(&secret.ObjectMeta)
 		// skip service account secret
 		if secret.Type == corev1.SecretTypeServiceAccountToken {
-			if err := v.createServiceAccount(secret); err != nil {
+			if err := v.createServiceAccount(ctx, secret); err != nil {
 				klog.Error(err)
 				return err
 			}
 		}
 		controllers.SetObjectGlobal(&secret.ObjectMeta)
-		_, err = v.client.CoreV1().Secrets(ns).Create(secret)
+		_, err = v.client.CoreV1().Secrets(ns).Create(ctx, secret, metav1.CreateOptions{})
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
 				continue
@@ -372,7 +371,7 @@ func (v *VirtualK8S) createSecrets(ctx context.Context, secrets []string, ns str
 	return nil
 }
 
-func (v *VirtualK8S) createServiceAccount(secret *corev1.Secret) error {
+func (v *VirtualK8S) createServiceAccount(ctx context.Context, secret *corev1.Secret) error {
 	if !v.enableServiceAccount {
 		return nil
 	}
@@ -388,14 +387,14 @@ func (v *VirtualK8S) createServiceAccount(secret *corev1.Secret) error {
 	}
 
 	ns := secret.Namespace
-	sa, err := v.client.CoreV1().ServiceAccounts(ns).Get(accountName, metav1.GetOptions{})
+	sa, err := v.client.CoreV1().ServiceAccounts(ns).Get(ctx, accountName, metav1.GetOptions{})
 	if err != nil || sa == nil {
 		klog.Infof("get serviceAccount [%v] err: [%v]]", sa, err)
-		sa, err = v.client.CoreV1().ServiceAccounts(ns).Create(&corev1.ServiceAccount{
+		sa, err = v.client.CoreV1().ServiceAccounts(ns).Create(ctx, &corev1.ServiceAccount{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: accountName,
 			},
-		})
+		}, metav1.CreateOptions{})
 		klog.Errorf("create serviceAccount [%v] err: [%v]", sa, err)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
@@ -410,7 +409,7 @@ func (v *VirtualK8S) createServiceAccount(secret *corev1.Secret) error {
 	secret.UID = sa.UID
 	secret.Annotations[corev1.ServiceAccountNameKey] = accountName
 	secret.Annotations[corev1.ServiceAccountUIDKey] = string(sa.UID)
-	_, err = v.client.CoreV1().Secrets(ns).Create(secret)
+	_, err = v.client.CoreV1().Secrets(ns).Create(ctx, secret, metav1.CreateOptions{})
 	if err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
@@ -419,7 +418,7 @@ func (v *VirtualK8S) createServiceAccount(secret *corev1.Secret) error {
 	}
 
 	sa.Secrets = []corev1.ObjectReference{{Name: secret.Name}}
-	_, err = v.client.CoreV1().ServiceAccounts(ns).Update(sa)
+	_, err = v.client.CoreV1().ServiceAccounts(ns).Update(ctx, sa, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Infof(
 			"update serviceAccount [%v] err: [%v]]",
@@ -444,7 +443,7 @@ func (v *VirtualK8S) createConfigMaps(ctx context.Context, configmaps []string, 
 			util.TrimObjectMeta(&configMap.ObjectMeta)
 			controllers.SetObjectGlobal(&configMap.ObjectMeta)
 
-			_, err = v.client.CoreV1().ConfigMaps(ns).Create(configMap)
+			_, err = v.client.CoreV1().ConfigMaps(ns).Create(ctx, configMap, metav1.CreateOptions{})
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
 					continue
@@ -463,7 +462,7 @@ func (v *VirtualK8S) createConfigMaps(ctx context.Context, configmaps []string, 
 // deleteConfigMaps a Kubernetes Pod and deploys it within the provider.
 func (v *VirtualK8S) deleteConfigMaps(ctx context.Context, configmaps []string, ns string) error {
 	for _, cm := range configmaps {
-		err := v.client.CoreV1().ConfigMaps(ns).Delete(cm, &metav1.DeleteOptions{})
+		err := v.client.CoreV1().ConfigMaps(ns).Delete(ctx, cm, metav1.DeleteOptions{})
 		if err == nil {
 			continue
 		}
@@ -479,18 +478,18 @@ func (v *VirtualK8S) deleteConfigMaps(ctx context.Context, configmaps []string, 
 // createPVCs a Kubernetes Pod and deploys it within the provider.
 func (v *VirtualK8S) createPVCs(ctx context.Context, pvcs []string, ns string) error {
 	for _, cm := range pvcs {
-		_, err := v.client.CoreV1().PersistentVolumeClaims(ns).Get(cm, metav1.GetOptions{})
+		_, err := v.client.CoreV1().PersistentVolumeClaims(ns).Get(ctx, cm, metav1.GetOptions{})
 		if err == nil {
 			continue
 		}
 		if errors.IsNotFound(err) {
-			pvc, err := v.master.CoreV1().PersistentVolumeClaims(ns).Get(cm, metav1.GetOptions{})
+			pvc, err := v.master.CoreV1().PersistentVolumeClaims(ns).Get(ctx, cm, metav1.GetOptions{})
 			if err != nil {
 				continue
 			}
 			util.TrimObjectMeta(&pvc.ObjectMeta)
 			controllers.SetObjectGlobal(&pvc.ObjectMeta)
-			_, err = v.client.CoreV1().PersistentVolumeClaims(ns).Create(pvc)
+			_, err = v.client.CoreV1().PersistentVolumeClaims(ns).Create(ctx, pvc, metav1.CreateOptions{})
 			if err != nil {
 				if errors.IsAlreadyExists(err) {
 					continue
@@ -503,27 +502,6 @@ func (v *VirtualK8S) createPVCs(ctx context.Context, pvcs []string, ns string) e
 		return fmt.Errorf("could not check pvc %s in external cluster: %v", cm, err)
 	}
 	return nil
-}
-
-func (v *VirtualK8S) patchConfigMap(cm, clone *corev1.ConfigMap) (*corev1.ConfigMap, error) {
-	if reflect.DeepEqual(cm.Data, clone.Data) {
-		return cm, nil
-	}
-	if !controllers.CheckGlobalLabelEqual(&cm.ObjectMeta, &clone.ObjectMeta) {
-		return cm, nil
-	}
-
-	patch, err := util.CreateMergePatch(cm, clone)
-	if err != nil {
-		return cm, err
-	}
-	newCM, err := v.client.CoreV1().ConfigMaps(cm.Namespace).Patch(cm.Name,
-		mergetypes.MergePatchType,
-		patch)
-	if err != nil {
-		return cm, err
-	}
-	return newCM, nil
 }
 
 // termSize helps exec termSize

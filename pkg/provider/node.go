@@ -152,9 +152,10 @@ func (v *VirtualK8S) getResourceFromPods() *common.Resource {
 func (v *VirtualK8S) getResourceFromPodsByNodeName(nodeName string) *common.Resource {
 	podResource := common.NewResource()
 	fieldSelector, err := fields.ParseSelector("spec.nodeName=" + nodeName)
-	pods, err := v.client.CoreV1().Pods(corev1.NamespaceAll).List(metav1.ListOptions{
-		FieldSelector: fieldSelector.String(),
-	})
+	pods, err := v.client.CoreV1().Pods(corev1.NamespaceAll).List(context.TODO(),
+		metav1.ListOptions{
+			FieldSelector: fieldSelector.String(),
+		})
 	if err != nil {
 		return podResource
 	}

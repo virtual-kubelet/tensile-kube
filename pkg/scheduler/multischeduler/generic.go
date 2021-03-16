@@ -17,7 +17,13 @@
 package multischeduler
 
 import (
+	"context"
 	"fmt"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/record"
+	schedulerserverconfig "k8s.io/kubernetes/cmd/kube-scheduler/app/config"
+	"k8s.io/kubernetes/pkg/scheduler/profile"
 
 	eventsv1beta1 "k8s.io/api/events/v1beta1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -37,41 +43,27 @@ type Scheduler struct {
 }
 
 // NewScheduler executes the scheduler based on the given configuration. It only return on error or when stopCh is closed.
-func NewScheduler(cc schedulerappconfig.Config, stopCh <-chan struct{}) (*Scheduler, error) {
+func NewScheduler(ctx context.Context, cc schedulerappconfig.Config, stopCh <-chan struct{}) (*Scheduler, error) {
 	// To help debugging, immediately log version
-
-	registry := framework.NewRegistry()
-
-	// Prepare event clients.
-	if _, err := cc.Client.Discovery().ServerResourcesForGroupVersion(eventsv1beta1.SchemeGroupVersion.String()); err == nil {
-		cc.Broadcaster = events.NewBroadcaster(&events.EventSinkImpl{Interface: cc.EventClient.Events("")})
-		cc.Recorder = cc.Broadcaster.NewRecorder(scheme.Scheme, cc.ComponentConfig.SchedulerName)
-	}
+	outOfTreeRegistry := make(framework.Registry)
+	completedConfig := cc.Complete()
+	recordFactory := getRecorderFactory(&completedConfig)
 
 	// Create the scheduler.
 	sched, err := scheduler.New(cc.Client,
-		cc.InformerFactory.Core().V1().Nodes(),
+		cc.InformerFactory,
 		cc.PodInformer,
-		cc.InformerFactory.Core().V1().PersistentVolumes(),
-		cc.InformerFactory.Core().V1().PersistentVolumeClaims(),
-		cc.InformerFactory.Core().V1().ReplicationControllers(),
-		cc.InformerFactory.Apps().V1().ReplicaSets(),
-		cc.InformerFactory.Apps().V1().StatefulSets(),
-		cc.InformerFactory.Core().V1().Services(),
-		cc.InformerFactory.Policy().V1beta1().PodDisruptionBudgets(),
-		cc.InformerFactory.Storage().V1().StorageClasses(),
-		cc.InformerFactory.Storage().V1beta1().CSINodes(),
-		cc.Recorder,
-		cc.ComponentConfig.AlgorithmSource,
+		recordFactory,
 		stopCh,
-		registry,
-		cc.ComponentConfig.Plugins,
-		cc.ComponentConfig.PluginConfig,
-		scheduler.WithName(cc.ComponentConfig.SchedulerName),
-		scheduler.WithHardPodAffinitySymmetricWeight(cc.ComponentConfig.HardPodAffinitySymmetricWeight),
+		scheduler.WithProfiles(cc.ComponentConfig.Profiles...),
+		scheduler.WithAlgorithmSource(cc.ComponentConfig.AlgorithmSource),
 		scheduler.WithPreemptionDisabled(cc.ComponentConfig.DisablePreemption),
 		scheduler.WithPercentageOfNodesToScore(cc.ComponentConfig.PercentageOfNodesToScore),
-		//scheduler.WithBindTimeoutSeconds(*cc.ComponentConfig.BindTimeoutSeconds)
+		scheduler.WithBindTimeoutSeconds(cc.ComponentConfig.BindTimeoutSeconds),
+		scheduler.WithFrameworkOutOfTreeRegistry(outOfTreeRegistry),
+		scheduler.WithPodMaxBackoffSeconds(cc.ComponentConfig.PodMaxBackoffSeconds),
+		scheduler.WithPodInitialBackoffSeconds(cc.ComponentConfig.PodInitialBackoffSeconds),
+		scheduler.WithExtenders(cc.ComponentConfig.Extenders...),
 	)
 	if err != nil {
 		return nil, err
@@ -82,7 +74,7 @@ func NewScheduler(cc schedulerappconfig.Config, stopCh <-chan struct{}) (*Schedu
 }
 
 // Run executes the scheduler based on the given configuration. It only return on error or when stopCh is closed.
-func (sched *Scheduler) Run() error {
+func (sched *Scheduler) Run(ctx context.Context) error {
 	// Prepare the event broadcaster.
 	if sched.Config.Broadcaster != nil && sched.Config.EventClient != nil {
 		sched.Config.Broadcaster.StartRecordingToSink(sched.StopCh)
@@ -95,9 +87,20 @@ func (sched *Scheduler) Run() error {
 	// Wait for all caches to sync before scheduling.
 	sched.Config.InformerFactory.WaitForCacheSync(sched.StopCh)
 
-	if !sched.WaitForCacheSync() {
-		return fmt.Errorf("Wait for sync error")
+	if !cache.WaitForCacheSync(ctx.Done()) {
+		return fmt.Errorf("failed to wait cache sync")
 	}
 	<-sched.StopCh
 	return nil
+}
+
+func getRecorderFactory(cc *schedulerserverconfig.CompletedConfig) profile.RecorderFactory {
+	if _, err := cc.Client.Discovery().ServerResourcesForGroupVersion(eventsv1beta1.SchemeGroupVersion.String()); err == nil {
+		cc.Broadcaster = events.NewBroadcaster(&events.EventSinkImpl{Interface: cc.EventClient.Events("")})
+		return profile.NewRecorderFactory(cc.Broadcaster)
+	}
+	return func(name string) events.EventRecorder {
+		r := cc.CoreBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: name})
+		return record.NewEventRecorderAdapter(r)
+	}
 }

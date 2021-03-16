@@ -28,6 +28,7 @@ import (
 	"k8s.io/klog"
 	schedulerappconfig "k8s.io/kubernetes/cmd/kube-scheduler/app/config"
 	framework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
+	schedulernodeinfo "k8s.io/kubernetes/pkg/scheduler/nodeinfo"
 
 	clusterconfig "github.com/virtual-kubelet/tensile-kube/pkg/scheduler/config"
 	"github.com/virtual-kubelet/tensile-kube/pkg/util"
@@ -66,31 +67,25 @@ func (m MultiSchedulingPlugin) Name() string {
 var _ framework.FilterPlugin = &MultiSchedulingPlugin{}
 
 // Filter check if a pod can run on node
-func (m MultiSchedulingPlugin) Filter(pc *framework.PluginContext, pod *v1.Pod, nodeName string) *framework.Status {
+func (m MultiSchedulingPlugin) Filter(pc context.Context, state *framework.CycleState,
+	pod *v1.Pod, nodeInfo *schedulernodeinfo.NodeInfo) *framework.Status {
 	if len(pod.Spec.NodeName) == 0 {
 		return framework.NewStatus(framework.Success, "")
 	}
-	snapshot := m.frameworkHandler.NodeInfoSnapshot()
+	snapshot := m.frameworkHandler.SnapshotSharedLister().NodeInfos()
 	if snapshot == nil {
 		return framework.NewStatus(framework.Success, "")
 	}
 
-	if snapshot.NodeInfoMap == nil {
+	if nodeInfo == nil || nodeInfo.Node() == nil {
+		return framework.NewStatus(framework.Unschedulable, "node not exit")
+	}
+	if !util.IsVirtualNode(nodeInfo.Node()) {
+		klog.V(5).Infof("node %v is not virtual node", nodeInfo.Node().Name)
 		return framework.NewStatus(framework.Success, "")
 	}
 
-	node := snapshot.NodeInfoMap[nodeName]
-	if snapshot.NodeInfoMap[nodeName] == nil {
-		klog.V(5).Infof("node %v not exist", nodeName)
-		return framework.NewStatus(framework.Success, "")
-	}
-
-	if !util.IsVirtualNode(node.Node()) {
-		klog.V(5).Infof("node %v is not virtual node", nodeName)
-		return framework.NewStatus(framework.Success, "")
-	}
-
-	schedulerName := util.GetClusterID(node.Node())
+	schedulerName := util.GetClusterID(nodeInfo.Node())
 	if len(schedulerName) == 0 {
 		klog.V(5).Infof("Can not found scheduler %v", schedulerName)
 		return framework.NewStatus(framework.Success, "")
@@ -117,7 +112,7 @@ func (m MultiSchedulingPlugin) Filter(pc *framework.PluginContext, pod *v1.Pod, 
 		podCopy.Spec.Tolerations = nil
 	}
 
-	result, err := scheduler.Algorithm.Schedule(podCopy, pc)
+	result, err := scheduler.Algorithm.Schedule(pc, scheduler.Profiles["default-scheduler"], state, podCopy)
 	klog.V(5).Infof("%v Nodes, Node %s can be scheduled to run pod", result.FeasibleNodes, result.SuggestedHost)
 	if err != nil {
 		klog.Infof("Pod selector: %+v, affinity: %+v", pod.Spec.NodeSelector, pod.Spec.Affinity)
@@ -167,11 +162,11 @@ func New(configuration *runtime.Unknown, f framework.FrameworkHandle) (framework
 			klog.Fatal(err)
 		}
 
-		scheduler, err := NewScheduler(*newConfig, ctx.Done())
+		scheduler, err := NewScheduler(ctx, *newConfig, ctx.Done())
 		if err != nil {
 			klog.Fatal(err)
 		}
-		go scheduler.Run()
+		go scheduler.Run(ctx)
 		schedulers[name] = scheduler
 	}
 
@@ -179,33 +174,4 @@ func New(configuration *runtime.Unknown, f framework.FrameworkHandle) (framework
 		frameworkHandler: f,
 		schedulers:       schedulers,
 	}, nil
-}
-
-func podCopy(pod *v1.Pod) *v1.Pod {
-	podCopy := pod.DeepCopy()
-	if podCopy.Spec.Affinity != nil {
-		nodeAffinity := podCopy.Spec.Affinity.NodeAffinity
-		// check Require
-		if nodeAffinity != nil &&
-			nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-			nodeSelector := nodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
-			filter := func(reqs []v1.NodeSelectorRequirement) []v1.NodeSelectorRequirement {
-				retReqs := make([]v1.NodeSelectorRequirement, 0)
-				for _, req := range reqs {
-
-					if req.Key == "type" {
-						continue
-					}
-					retReqs = append(retReqs, req)
-				}
-				return retReqs
-			}
-			for i, term := range nodeSelector.NodeSelectorTerms {
-				nodeSelector.NodeSelectorTerms[i].MatchExpressions = filter(term.MatchExpressions)
-				nodeSelector.NodeSelectorTerms[i].MatchFields = filter(term.MatchFields)
-			}
-		}
-
-	}
-	return podCopy
 }

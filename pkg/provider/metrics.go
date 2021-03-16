@@ -36,9 +36,10 @@ func (v *VirtualK8S) GetStatsSummary(ctx context.Context) (*stats.Summary, error
 	selector := labels.SelectorFromSet(map[string]string{
 		util.VirtualPodLabel: "true"},
 	)
-	metrics, err := v.metricClient.MetricsV1beta1().PodMetricses(corev1.NamespaceAll).List(v1.ListOptions{
-		LabelSelector: selector.String(),
-	})
+	metrics, err := v.metricClient.MetricsV1beta1().PodMetricses(corev1.NamespaceAll).List(ctx,
+		v1.ListOptions{
+			LabelSelector: selector.String(),
+		})
 	if err != nil {
 		return nil, err
 	}

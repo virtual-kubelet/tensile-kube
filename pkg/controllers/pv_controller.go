@@ -17,6 +17,7 @@
 package controllers
 
 import (
+	"context"
 	"reflect"
 	"time"
 
@@ -363,8 +364,8 @@ func (ctrl *PVController) syncPVCFromMaster() {
 	}
 
 	if deletePVCInClient || pvc.DeletionTimestamp != nil {
-		if err = ctrl.client.CoreV1().PersistentVolumeClaims(namespace).Delete(pvcName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.client.CoreV1().PersistentVolumeClaims(namespace).Delete(context.TODO(), pvcName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete pvc from client cluster failed, error: %v", err)
 				return
@@ -418,8 +419,8 @@ func (ctrl *PVController) syncPVStatusFromClient() {
 	}
 
 	if pvNeedDelete || pv.DeletionTimestamp != nil {
-		if err = ctrl.master.CoreV1().PersistentVolumes().Delete(pvName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.master.CoreV1().PersistentVolumes().Delete(context.TODO(), pvName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete pvc from master cluster failed, error: %v", err)
 				return
@@ -443,6 +444,7 @@ func (ctrl *PVController) syncPVFromMaster() {
 	defer ctrl.pvMasterQueue.Done(key)
 	pvName := key.(string)
 	klog.V(4).Infof("Started pv processing %q", pvName)
+	ctx := context.TODO()
 	// get pv to process
 	pv, err := ctrl.masterPVLister.Get(pvName)
 	defer func() {
@@ -459,7 +461,7 @@ func (ctrl *PVController) syncPVFromMaster() {
 			return
 		}
 		// Double check
-		_, err = ctrl.master.CoreV1().PersistentVolumes().Get(pvName, metav1.GetOptions{})
+		_, err = ctrl.master.CoreV1().PersistentVolumes().Get(ctx, pvName, metav1.GetOptions{})
 		if err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Error getting pv %q: %v", pvName, err)
@@ -471,8 +473,8 @@ func (ctrl *PVController) syncPVFromMaster() {
 	}
 
 	if pvNeedDelete || pv.DeletionTimestamp != nil {
-		if err = ctrl.client.CoreV1().PersistentVolumes().Delete(pvName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.client.CoreV1().PersistentVolumes().Delete(ctx, pvName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete pvc from client cluster failed, error: %v", err)
 				return
@@ -552,7 +554,8 @@ func (ctrl *PVController) syncPVStatusHandler(pv *v1.PersistentVolume) {
 			pvInMaster.Spec.ClaimRef.UID = newPVC.UID
 			pvInMaster.Spec.ClaimRef.ResourceVersion = newPVC.ResourceVersion
 		}
-		pvInMaster, err = ctrl.master.CoreV1().PersistentVolumes().Create(pvInMaster)
+		pvInMaster, err = ctrl.master.CoreV1().PersistentVolumes().Create(context.TODO(),
+			pvInMaster, metav1.CreateOptions{})
 		if err != nil || pvInMaster == nil {
 			klog.Errorf("Create pv in master cluster failed, error: %v", err)
 			return
@@ -625,13 +628,12 @@ func (ctrl *PVController) patchPVC(pvc, clone *v1.PersistentVolumeClaim,
 			return pvc, nil
 		}
 	}
-
 	patch, err := util.CreateMergePatch(pvc, clone)
 	if err != nil {
 		return pvc, err
 	}
-	newPVC, err := client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Patch(pvc.Name,
-		mergetypes.MergePatchType, patch)
+	newPVC, err := client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Patch(context.TODO(),
+		pvc.Name, mergetypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		return pvc, err
 	}
@@ -659,9 +661,8 @@ func (ctrl *PVController) patchPV(pv, clone *v1.PersistentVolume,
 	if err != nil {
 		return pv, err
 	}
-	newPV, err := client.CoreV1().PersistentVolumes().Patch(pv.Name,
-		mergetypes.MergePatchType,
-		patch)
+	newPV, err := client.CoreV1().PersistentVolumes().Patch(context.TODO(), pv.Name,
+		mergetypes.MergePatchType, patch, metav1.PatchOptions{})
 	if err != nil {
 		return pv, err
 	}
@@ -690,6 +691,7 @@ func (ctrl *PVController) shouldEnUpperQueue(old, new *v1.PersistentVolumeClaim)
 }
 
 func (ctrl *PVController) gc() {
+	ctx := context.TODO()
 	pvcs, err := ctrl.clientPVCLister.List(labels.Everything())
 	if err != nil {
 		klog.Error(err)
@@ -704,7 +706,8 @@ func (ctrl *PVController) gc() {
 		}
 		_, err = ctrl.masterPVCLister.PersistentVolumeClaims(pvc.Namespace).Get(pvc.Name)
 		if err != nil && apierrs.IsNotFound(err) {
-			err := ctrl.client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(pvc.Name, &metav1.DeleteOptions{})
+			err := ctrl.client.CoreV1().PersistentVolumeClaims(pvc.Namespace).Delete(ctx,
+				pvc.Name, metav1.DeleteOptions{})
 			if err != nil && !apierrs.IsNotFound(err) {
 				klog.Error(err)
 			}

@@ -17,6 +17,7 @@
 package controllers
 
 import (
+	"context"
 	"reflect"
 	"time"
 
@@ -228,6 +229,7 @@ func (ctrl *CommonController) secretDeleted(obj interface{}) {
 
 // syncConfigMap deals with one key off the queue.  It returns false when it's time to quit.
 func (ctrl *CommonController) syncConfigMap() {
+	ctx := context.TODO()
 	keyObj, quit := ctrl.configMapQueue.Get()
 	if quit {
 		return
@@ -270,8 +272,8 @@ func (ctrl *CommonController) syncConfigMap() {
 	}
 
 	if deleteConfigMapInClient || configMap.DeletionTimestamp != nil {
-		if err = ctrl.client.CoreV1().ConfigMaps(namespace).Delete(configMapName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.client.CoreV1().ConfigMaps(namespace).Delete(ctx, configMapName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete configMap from client cluster failed, error: %v", err)
 				return
@@ -283,8 +285,8 @@ func (ctrl *CommonController) syncConfigMap() {
 	}
 
 	// data updated
-	var old *v1.ConfigMap
-	old, err = ctrl.clientConfigMapLister.ConfigMaps(namespace).Get(configMapName)
+	var configmapInClient *v1.ConfigMap
+	configmapInClient, err = ctrl.clientConfigMapLister.ConfigMaps(namespace).Get(configMapName)
 	if err != nil {
 		if apierrs.IsNotFound(err) {
 			err = nil
@@ -293,11 +295,12 @@ func (ctrl *CommonController) syncConfigMap() {
 		klog.Errorf("Get configMap from client cluster failed, error: %v", err)
 		return
 	}
-	util.UpdateConfigMap(old, configMap)
-	if IsObjectGlobal(&old.ObjectMeta) {
+	util.UpdateConfigMap(configmapInClient, configMap)
+	if IsObjectGlobal(&configmapInClient.ObjectMeta) {
 		return
 	}
-	_, err = ctrl.client.CoreV1().ConfigMaps(configMap.Namespace).Update(old)
+	_, err = ctrl.client.CoreV1().ConfigMaps(configMap.Namespace).Update(ctx,
+		configmapInClient, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Errorf("Get configMap from client cluster failed, error: %v", err)
 		return
@@ -306,6 +309,7 @@ func (ctrl *CommonController) syncConfigMap() {
 
 // syncSecret deals with one key off the queue.  It returns false when it's time to quit.
 func (ctrl *CommonController) syncSecret() {
+	ctx := context.TODO()
 	keyObj, quit := ctrl.secretQueue.Get()
 	if quit {
 		return
@@ -349,8 +353,8 @@ func (ctrl *CommonController) syncSecret() {
 	}
 
 	if deleteSecretInClient || secret.DeletionTimestamp != nil {
-		if err = ctrl.client.CoreV1().Secrets(namespace).Delete(secretName,
-			&metav1.DeleteOptions{}); err != nil {
+		if err = ctrl.client.CoreV1().Secrets(namespace).Delete(ctx, secretName,
+			metav1.DeleteOptions{}); err != nil {
 			if !apierrs.IsNotFound(err) {
 				klog.Errorf("Delete secret from client cluster failed, error: %v", err)
 				return
@@ -376,7 +380,7 @@ func (ctrl *CommonController) syncSecret() {
 	if IsObjectGlobal(&old.ObjectMeta) {
 		return
 	}
-	_, err = ctrl.client.CoreV1().Secrets(secret.Namespace).Update(old)
+	_, err = ctrl.client.CoreV1().Secrets(secret.Namespace).Update(ctx, old, metav1.UpdateOptions{})
 	if err != nil {
 		klog.Errorf("Get secret from client cluster failed, error: %v", err)
 		return
@@ -438,7 +442,7 @@ func (ctrl *CommonController) shouldEnqueueAddSecret(secret *v1.Secret) bool {
 	return true
 }
 
-func (ctrl *CommonController) gcConfigMap() {
+func (ctrl *CommonController) gcConfigMap(ctx context.Context) {
 	configMaps, err := ctrl.clientConfigMapLister.List(labels.Everything())
 	if err != nil {
 		klog.Error(err)
@@ -453,7 +457,8 @@ func (ctrl *CommonController) gcConfigMap() {
 		}
 		_, err = ctrl.masterConfigMapLister.ConfigMaps(configMap.Namespace).Get(configMap.Name)
 		if err != nil && apierrs.IsNotFound(err) {
-			err := ctrl.client.CoreV1().ConfigMaps(configMap.Namespace).Delete(configMap.Name, &metav1.DeleteOptions{})
+			err := ctrl.client.CoreV1().ConfigMaps(configMap.Namespace).Delete(ctx,
+				configMap.Name, metav1.DeleteOptions{})
 			if err != nil && !apierrs.IsNotFound(err) {
 				klog.Error(err)
 			}
@@ -462,7 +467,7 @@ func (ctrl *CommonController) gcConfigMap() {
 	}
 }
 
-func (ctrl *CommonController) gcSecret() {
+func (ctrl *CommonController) gcSecret(ctx context.Context) {
 	secrets, err := ctrl.clientSecretLister.List(labels.Everything())
 	if err != nil {
 		klog.Error(err)
@@ -477,7 +482,7 @@ func (ctrl *CommonController) gcSecret() {
 		}
 		_, err = ctrl.masterSecretLister.Secrets(secret.Namespace).Get(secret.Name)
 		if err != nil && apierrs.IsNotFound(err) {
-			err := ctrl.client.CoreV1().Secrets(secret.Namespace).Delete(secret.Name, &metav1.DeleteOptions{})
+			err := ctrl.client.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
 			if err != nil && !apierrs.IsNotFound(err) {
 				klog.Error(err)
 			}
@@ -487,8 +492,9 @@ func (ctrl *CommonController) gcSecret() {
 }
 
 func (ctrl *CommonController) gc() {
-	ctrl.gcConfigMap()
-	ctrl.gcSecret()
+	ctx := context.TODO()
+	ctrl.gcConfigMap(ctx)
+	ctrl.gcSecret(ctx)
 }
 
 func (ctrl *CommonController) runGC(stopCh <-chan struct{}) {
