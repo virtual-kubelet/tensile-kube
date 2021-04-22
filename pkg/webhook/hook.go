@@ -268,14 +268,10 @@ func addDefaultPodTolerations(tolerations []corev1.Toleration, notReady, unSched
 
 // injectNodeSelector reserve  ignoreLabels in nodeSelector, others would be removed
 func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) map[string]string {
-	nodeSelectorBackup := make(map[string]string)
 	finalNodeSelector := make(map[string]string)
 	labelMap := make(map[string]string)
 	for _, v := range ignoreLabels {
 		labelMap[v] = v
-	}
-	for k, v := range nodeSelector {
-		nodeSelectorBackup[k] = v
 	}
 	for k, v := range nodeSelector {
 		// not found in label, delete
@@ -289,10 +285,6 @@ func injectNodeSelector(nodeSelector map[string]string, ignoreLabels []string) m
 }
 
 func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Affinity {
-	labelMap := make(map[string]string)
-	for _, v := range ignoreLabels {
-		labelMap[v] = v
-	}
 	if affinity.NodeAffinity == nil {
 		return nil
 	}
@@ -302,6 +294,10 @@ func injectAffinity(affinity *corev1.Affinity, ignoreLabels []string) *corev1.Af
 	required := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 	if required == nil {
 		return nil
+	}
+	labelMap := make(map[string]string)
+	for _, v := range ignoreLabels {
+		labelMap[v] = v
 	}
 	requiredCopy := affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.DeepCopy()
 	var nodeSelectorTerm []corev1.NodeSelectorTerm
