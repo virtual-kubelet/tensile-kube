@@ -56,7 +56,7 @@ const (
 	// NodeType is define the node type key
 	NodeType = "type"
 	// BatchPodLabel is the label of batch pod
-	BatchPodLabel = "group.batch.scheduler.tencent.com"
+	BatchPodLabel = "pod-group.scheduling.sigs.k8s.io"
 	// TaintNodeNotReady will be added when node is not ready
 	// and feature-gate for TaintBasedEvictions flag is enabled,
 	// and removed when node becomes ready.
