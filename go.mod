@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/evanphx/json-patch v4.9.0+incompatible
-	github.com/mattbaird/jsonpatch v0.0.0-20171005235357-81af80346b1a
+	github.com/mattbaird/jsonpatch v0.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.7
@@ -26,6 +26,7 @@ require (
 
 replace (
 	github.com/Sirupsen/logrus => github.com/sirupsen/logrus v1.4.1
+	github.com/mattbaird/jsonpatch => github.com/cwdsuzhou/jsonpatch v0.0.0-20210423033938-bbec2435b178
 	k8s.io/api => k8s.io/api v0.18.4
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.18.4
 	k8s.io/apimachinery => k8s.io/apimachinery v0.18.4
