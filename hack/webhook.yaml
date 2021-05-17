@@ -6,7 +6,7 @@ webhooks:
   - clientConfig:
       caBundle: ${caBundle}
       service:
-        name: vk-webhook
+        name: vk-mutator
         namespace: kube-system
         path: /mutate
     failurePolicy: Fail
