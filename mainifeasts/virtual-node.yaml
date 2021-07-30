@@ -86,6 +86,8 @@ spec:
               value: /etc/virtual-kubelet/cert/cert.pem
             - name: APISERVER_KEY_LOCATION
               value: /etc/virtual-kubelet/cert/key.pem
+            - name: APISERVER_CA_CERT_LOCATION
+              value: /etc/virtual-kubelet/cert/ca.pem
             - name: DEFAULT_NODE_NAME
               value: virtual-kubelet
             - name: VKUBELET_POD_IP
@@ -113,7 +115,7 @@ spec:
             - --metrics-addr=:10455
           livenessProbe:
             tcpSocket:
-              port: 10450
+              port: 10455
             initialDelaySeconds: 20
             periodSeconds: 20
       volumes:
