@@ -23,7 +23,7 @@ BUILD_TIME=$(shell TZ=Asia/Shanghai date +%FT%T%z)
 CMDS=build-vk
 all: test build
 
-build: fmt vet provider scheduler webhook descheduler
+build: fmt vet provider webhook descheduler
 
 fmt:
 	go fmt ./pkg/...
