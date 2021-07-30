@@ -25,12 +25,14 @@ This is a kubernetes provider implemented based on virtual-kubelet. Pods created
 will be synced to the lower cluster. If pods are depend on configmaps or secrets, dependencies would 
 also be created in the cluster. 
 
-- multi-scheduler
+- multi-cluster scheduler
 
 The scheduler is implemented based on [K8s scheduling framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/). It would watch all of the lower 
-clusters's capacity and call `filter` while scheduling pods. If the number of available nodes is greator 
+clusters's capacity and call `filter` while scheduling pods. If the number of available nodes is greater 
 than or equal to 1, the pods can be scheduler. As you see, this may cost more resources, so we add another 
 implementation(descheduler).
+
+The multi-cluster scheduler repo has been removed to [super-scheduling](https://github.com/cwdsuzhou/super-scheduling)
 
 - descheduler
 

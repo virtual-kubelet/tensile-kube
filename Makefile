@@ -35,10 +35,6 @@ provider:
 	mkdir -p bin
 	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.buildVersion=$(VERSION)' -X 'main.buildTime=${BUILD_TIME}'" -o ./bin/virtual-node ./cmd/provider
 
-scheduler:
-	mkdir -p bin
-	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'main.buildVersion=$(VERSION)' -X 'main.buildTime=${BUILD_TIME}'" -o ./bin/multi-scheduler ./cmd/scheduler
-
 webhook:
 	mkdir -p bin
 	CGO_ENABLED=0 GOOS=linux go build -ldflags "-X 'github.com/virtual-kubelet/tensile-kube/cmd/webhook/app.Version=$(VERSION)'" -o ./bin/webhook ./cmd/webhook
