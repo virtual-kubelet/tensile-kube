@@ -83,7 +83,7 @@ in `default` namespaces and other services in `kube-system` would be synced to l
 
 ![multi](./docs/multi.png)
 
-In [Tencent Games](https://game.qq.com/), we build the kubernetes cluster based on the [flannel](https://github.com/coreos/flannel) and all node CIDR allocation
+In [Tencent Games](https://game.qq.com/), they build the kubernetes cluster based on the [flannel](https://github.com/coreos/flannel) and all node CIDR allocation
  is based on the same etcd. So the pods actually can access each other directly by IP.
 
 ## Build
@@ -180,8 +180,8 @@ kubectl apply -f hack/descheduler.yaml
 
 ## Main Contributors
 
-- [Weidong Cai](https://github.com/cwdsuzhou) from Tencent Games
-- [Ye Yin](https://github.com/hustcat) from Tencent Games
+- [Weidong Cai](https://github.com/cwdsuzhou) from Tencent
+- [Ye Yin](https://github.com/hustcat) from Tencent
 
 ## Other Contributors
 - [Runzhong Liu](https://github.com/runzhliu)
