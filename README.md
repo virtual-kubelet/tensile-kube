@@ -42,17 +42,16 @@ nodeAffinity injected.
 
 We can choose one of the multi-scheduler and descheduler in the upper cluster or both.
 
-**Large cluster is not recommended to use multi-scheduler, e.g. sum of nodes in sub cluster is more than
- 10000, descheduler would cost less.**
- 
-**Multi-scheduler would be better when there are fewer nodes in a cluster, e.g. we have 10 clusters but each cluster
- only has 100 nodes.**
+ > - Large cluster is not recommended to use multi-scheduler, e.g. sum of nodes in sub cluster is more than
+ 10000, descheduler would cost less.
+> - Multi-scheduler would be better when there are fewer nodes in a cluster, e.g. we have 10 clusters but each cluster
+ only has 100 nodes.
 
 - webhook
 
 Webhook are designed based on K8s mutation webhook. It helps convert some fields that can affect scheduling pods(not in kube-system) in the upper cluster, e.g. `nodeSelector`, `nodeAffinity` and `tolerations`. But only the pods have a label `virtual-pod:true` would be converted. These fields would be converted into the annotation as follows:
  
-```build
+```text
     clusterSelector: '{"tolerations":[{"key":"node.kubernetes.io/not-ready","operator":"Exists","effect":"NoExecute"},{"key":"node.kubernetes.io/unreachable","operator":"Exists","effect":"NoExecute"},{"key":"test","operator":"Exists","effect":"NoExecute"},{"key":"test1","operator":"Exists","effect":"NoExecute"},{"key":"test2","operator":"Exists","effect":"NoExecute"},{"key":"test3","operator":"Exists","effect":"NoExecute"}]}'
 ``` 
 
@@ -60,11 +59,9 @@ This fields we would be added back when the pods created in the lower cluster.
 
 Pods are strongly recommended to run in the lower clusters and add a label `virtual-pod:true`, except for those pods must be deployed in `kube-system` in the upper cluster.
  
-**For K8s< 1.16, pods without the label would not be converted. But queries would still send to the webhook.**
-
-**For K8s>=1.16, we can use label selector to enable the webhook for some specified pods.**
- 
-**Overall, the initial idea is that we only run pods in lower clusters.**
+> - For K8s< 1.16, pods without the label would not be converted. But queries would still send to the webhook.
+> - For K8s>=1.16, we can use label selector to enable the webhook for some specified pods. 
+> - Overall, the initial idea is that we only run pods in lower clusters.**
 
 ## Restrictions
 
@@ -101,9 +98,10 @@ git clone https://github.com/virtual-kubelet/tensile-kube.git && make
       --enable-serviceaccount       enable service account for pods, like spark driver, mpi launcher (default true)
       --ignore-labels string        ignore-labels are the labels we would like to ignore when build pod for client clusters, usually these labels will infulence schedule, default group.batch.scheduler.tencent.com, multi labels should be seperated by comma(,) (default "group.batch.scheduler.tencent.com")
       --log-level string            set the log level, e.g. "debug", "info", "warn", "error" (default "info")
+      ...
 ```
 
-### deploy the virtual node(support deploy in cluster)
+### deploy the virtual node
 
 ```build
 export KUBELET_PORT=10350
@@ -114,47 +112,13 @@ nohup ./virtual-node --nodename $IP --provider k8s --kube-api-qps 500 --kube-api
 -burst 1000 --kubeconfig /root/server-kube.config --client-kubeconfig /client-kube.config --klog.v 4 --log-level
  debug 2>&1 > node.log &
 ```
+or deploy in K8s
 
-### deploy the multi-scheduler(support deploy in cluster)
-
-```build
-nohup ./multi-scheduler --v=5 --config=./multi-scheduler-config.json --authentication-kubeconfig=/etc/kubernetes/scheduler.conf --authorization-kubeconfig=/etc/kubernetes/scheduler.conf --bind-address=127.0.0.1 --kubeconfig=/etc/kubernetes/scheduler.conf --leader-elect=true 2>&1 >multi.log &
-```
-
-multi-scheduler-config.json is as follow:
-
-```build
-{
-  "kind": "KubeSchedulerConfiguration",
-  "apiVersion": "kubescheduler.config.k8s.io/v1alpha1",
-  "clientConnection": {
-    "kubeconfig": "~/root/kube/config"
-  },
-  "leaderElection": {
-    "leaderElect": true
-  },
-  "plugins": {
-    "filter": {
-      "enabled": [
-        {
-          "name": "multi-scheduler"
-        }
-      ]
-    }
-  },
-  "pluginConfig": [
-    {
-      "name": "multi-scheduler",
-      "args": {
-        "cluster_configuration": {
-          "test": {
-            "kube_config": "/root/cloud.config"
-          }
-        }
-      }
-    }
-  ]
-}
+```shell
+# change the config in secret `virtual-kubelet` in `manifeasts/virtual-node.yaml` first,
+# change the image
+# then deploy it
+kubectl apply -f manifeasts/virtual-node.yaml
 ```
 
 ### deploy the webhook
@@ -165,8 +129,8 @@ it is recommended to be deployed in K8s cluster
 2. replace the image of webhook
 3. deploy it in K8s cluster
 
-```build
-kubectl apply -f hack/webhook.yaml
+```shell
+kubectl apply -f manifeasts/webhook.yaml
 ```
 
 ### deploy the descheduler
@@ -174,8 +138,8 @@ kubectl apply -f hack/webhook.yaml
 1. replace the image with yours
 2. deploy it in K8s cluster
 
-```build
-kubectl apply -f hack/descheduler.yaml
+```shell
+kubectl apply -f manifeasts/descheduler.yaml
 ```
 
 ## Main Contributors
