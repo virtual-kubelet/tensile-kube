@@ -19,30 +19,15 @@ package util
 import (
 	"github.com/virtual-kubelet/tensile-kube/pkg/common"
 	corev1 "k8s.io/api/core/v1"
+	resourcehelper "k8s.io/kubernetes/pkg/api/v1/resource"
 )
-
-// GetRequestFromContainer get resources required by container
-func GetRequestFromContainer(container *corev1.Container) *common.Resource {
-	resources := container.Resources.Requests
-	if resources == nil {
-		resources = container.Resources.Limits
-		if resources == nil {
-			resources = corev1.ResourceList{}
-		}
-	}
-	capacity := common.ConvertResource(resources)
-	return capacity
-}
 
 // GetRequestFromPod get resources required by pod
 func GetRequestFromPod(pod *corev1.Pod) *common.Resource {
 	if pod == nil {
 		return nil
 	}
-	capacity := common.Resource{Custom: common.CustomResources{}}
-	for _, container := range pod.Spec.Containers {
-		res := GetRequestFromContainer(&container)
-		capacity.Add(res)
-	}
-	return &capacity
+	reqs, _ := resourcehelper.PodRequestsAndLimits(pod)
+	capacity := common.ConvertResource(reqs)
+	return capacity
 }
