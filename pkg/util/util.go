@@ -40,6 +40,10 @@ func GetRequestFromPod(pod *corev1.Pod) *common.Resource {
 		return nil
 	}
 	capacity := common.Resource{Custom: common.CustomResources{}}
+	for _, container := range pod.Spec.InitContainers {
+		res := GetRequestFromContainer(&container)
+		capacity.Add(res)
+	}
 	for _, container := range pod.Spec.Containers {
 		res := GetRequestFromContainer(&container)
 		capacity.Add(res)
