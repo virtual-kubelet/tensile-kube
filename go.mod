@@ -18,8 +18,7 @@ require (
 	k8s.io/component-base v0.18.4
 	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20200410163147-594e756bea31 // indirect
-	k8s.io/kube-scheduler v0.0.0
-	k8s.io/kubernetes v1.18.4
+	k8s.io/kubernetes v1.18.19
 	k8s.io/metrics v1.18.4
 	sigs.k8s.io/descheduler v0.18.0
 )
