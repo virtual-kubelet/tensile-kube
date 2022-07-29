@@ -297,6 +297,12 @@ func (v *VirtualK8S) updatePod(oldObj, newObj interface{}) {
 		v.updateVKCapacityFromPod(oldCopy, newCopy)
 		return
 	}
+	// when pod deleted in lower cluster
+	// set DeletionGracePeriodSeconds to nil because it's readOnly
+	if newCopy.DeletionTimestamp != nil {
+		newCopy.DeletionGracePeriodSeconds = nil
+	}
+
 	if !reflect.DeepEqual(oldCopy.Status, newCopy.Status) || newCopy.DeletionTimestamp != nil {
 		util.TrimObjectMeta(&newCopy.ObjectMeta)
 		v.updatedPod <- newCopy
