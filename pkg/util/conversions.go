@@ -53,7 +53,7 @@ func TrimPod(pod *corev1.Pod, ignoreLabels []string) *corev1.Pod {
 	podCopy.Spec.NodeName = ""
 	podCopy.Status = corev1.PodStatus{}
 	// remove labels should be removed, which would influence schedule in client cluster
-	tripped := trimLabels(podCopy.ObjectMeta.Labels, ignoreLabels)
+	tripped := TrimLabels(podCopy.ObjectMeta.Labels, ignoreLabels)
 	if tripped != nil {
 		trippedStr, err := json.Marshal(tripped)
 		if err != nil {
@@ -106,7 +106,7 @@ func GetUpdatedPod(orig, update *corev1.Pod, ignoreLabels []string) {
 	orig.Annotations = update.Annotations
 	orig.Spec.ActiveDeadlineSeconds = update.Spec.ActiveDeadlineSeconds
 	if orig.Labels != nil {
-		trimLabels(orig.ObjectMeta.Labels, ignoreLabels)
+		TrimLabels(orig.ObjectMeta.Labels, ignoreLabels)
 	}
 	return
 }
@@ -174,8 +174,8 @@ func recoverSelectors(pod *corev1.Pod, cns *ClustersNodeSelection) {
 	}
 }
 
-// trimLabels removes label from labels according to ignoreLabels
-func trimLabels(labels map[string]string, ignoreLabels []string) map[string]string {
+// TrimLabels removes label from labels according to ignoreLabels
+func TrimLabels(labels map[string]string, ignoreLabels []string) map[string]string {
 	if ignoreLabels == nil {
 		return nil
 	}
