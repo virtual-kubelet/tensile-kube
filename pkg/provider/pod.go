@@ -120,8 +120,11 @@ func (v *VirtualK8S) UpdatePod(ctx context.Context, pod *corev1.Pod) error {
 		klog.Info("Pod is not created by vk, ignore")
 		return nil
 	}
-
+	//tripped ignore labels which recoverd in currentPod
+	util.TrimLabels(currentPod.ObjectMeta.Labels, v.ignoreLabels)
 	podCopy := currentPod.DeepCopy()
+	// util.GetUpdatedPod update PodCopy container image, annotations, labels.
+	// recover toleration, affinity, tripped ignore labels.
 	util.GetUpdatedPod(podCopy, pod, v.ignoreLabels)
 	if reflect.DeepEqual(currentPod.Spec, podCopy.Spec) &&
 		reflect.DeepEqual(currentPod.Annotations, podCopy.Annotations) &&
