@@ -104,3 +104,12 @@ func podStopped(pod *corev1.Pod) bool {
 	return (pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed) && pod.Spec.
 		RestartPolicy == corev1.RestartPolicyNever
 }
+
+// nodeCustomLabel adds an additional node label.
+// The label can be any customised meaningful label specified from user.
+func nodeCustomLabel(node *corev1.Node, label string) {
+	nodelabel := strings.Split(label, ":")
+	if len(nodelabel) == 2 {
+		node.ObjectMeta.Labels[strings.TrimSpace(nodelabel[0])] = strings.TrimSpace(nodelabel[1])
+	}
+}

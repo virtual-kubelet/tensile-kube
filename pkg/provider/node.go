@@ -62,7 +62,13 @@ func (v *VirtualK8S) ConfigureNode(ctx context.Context, node *corev1.Node) {
 	node.ObjectMeta.Labels[corev1.LabelArchStable] = "amd64"
 	node.ObjectMeta.Labels[corev1.LabelOSStable] = "linux"
 	node.ObjectMeta.Labels[util.LabelOSBeta] = "linux"
+	if label := os.Getenv("VKUBELET_NODE_LABEL"); label != "" {
+		nodeCustomLabel(node, label)
+	}
 	node.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: os.Getenv("VKUBELET_POD_IP")}}
+	if externalIP := os.Getenv("VKUBELET_EXTERNAL_POD_IP"); externalIP != "" {
+		node.Status.Addresses = append(node.Status.Addresses, corev1.NodeAddress{Type: corev1.NodeExternalIP, Address: externalIP})
+	}
 	node.Status.Conditions = nodeConditions()
 	node.Status.DaemonEndpoints = v.nodeDaemonEndpoints()
 	v.providerNode.Node = node
