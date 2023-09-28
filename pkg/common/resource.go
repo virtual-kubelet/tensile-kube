@@ -139,6 +139,9 @@ func (r *Resource) SetCapacityToNode(node *corev1.Node) {
 		corev1.ResourceEphemeralStorage: empStorage,
 	}
 	for name, quota := range r.Custom {
+		if quota.Sign() < 0 {
+			continue
+		}
 		node.Status.Capacity[name] = quota
 	}
 
