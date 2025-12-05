@@ -6,7 +6,7 @@ require (
 	github.com/evanphx/json-patch v4.9.0+incompatible
 	github.com/mattbaird/jsonpatch v0.0.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/sirupsen/logrus v1.4.2
+	github.com/sirupsen/logrus v1.8.3
 	github.com/spf13/cobra v0.0.7
 	github.com/spf13/pflag v1.0.5
 	github.com/virtual-kubelet/node-cli v0.5.2-0.20210302175044-b3a8c550471d
